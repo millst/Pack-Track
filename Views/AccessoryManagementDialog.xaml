@@ -1,0 +1,110 @@
+﻿<!-- Views/AccessoryManagementDialog.xaml -->
+<Window x:Class="Pack_Track.Views.AccessoryManagementDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Manage Accessories"
+        Height="500" Width="700"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#2196F3"/>
+        <SolidColorBrush x:Key="BackgroundBrush" Color="#FAFAFA"/>
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#E0E0E0"/>
+
+        <Style x:Key="ModernButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#1976D2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Background" Value="#CCCCCC"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource BackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+            <Grid Margin="16">
+                <TextBlock Text="{Binding ProductName, StringFormat='Manage Accessories for: {0}'}" 
+                           FontSize="18" FontWeight="Medium" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- Content -->
+        <Grid Grid.Row="1" Margin="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Available Products -->
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Available Products" FontWeight="Medium" Margin="0,0,0,8"/>
+                <ListBox ItemsSource="{Binding AvailableProducts}" SelectedItem="{Binding SelectedAvailableProduct}"
+                         DisplayMemberPath="Name" Height="250" Background="White"/>
+                <TextBlock Text="Select a product and click 'Add →' to make it an accessory" 
+                           FontSize="11" Foreground="#666" Margin="0,4,0,8" TextWrapping="Wrap"/>
+                <Button Content="Add as Accessory →" Style="{StaticResource ModernButtonStyle}" 
+                        Command="{Binding AddAccessoryCommand}" HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Spacer -->
+            <Border Grid.Column="1" Width="20"/>
+
+            <!-- Current Accessories -->
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="Current Accessories" FontWeight="Medium" Margin="0,0,0,8"/>
+                <ListBox ItemsSource="{Binding CurrentAccessories}" SelectedItem="{Binding SelectedAccessory}"
+                         DisplayMemberPath="Name" Height="250" Background="White"/>
+                <TextBlock Text="Select an accessory and click '← Remove' to remove it" 
+                           FontSize="11" Foreground="#666" Margin="0,4,0,8" TextWrapping="Wrap"/>
+                <Button Content="← Remove Accessory" Style="{StaticResource ModernButtonStyle}" 
+                        Command="{Binding RemoveAccessoryCommand}" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
+            <Grid Margin="16,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="Accessories will be automatically allocated when the main product is assigned to an actor." 
+                           VerticalAlignment="Center" Foreground="#757575" FontStyle="Italic"/>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="Save" Style="{StaticResource ModernButtonStyle}" Margin="0,0,8,0" Click="OkButton_Click"/>
+                    <Button Content="Cancel" Background="#757575" Style="{StaticResource ModernButtonStyle}" Click="CancelButton_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

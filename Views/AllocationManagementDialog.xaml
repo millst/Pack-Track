@@ -1,0 +1,200 @@
+﻿<!-- Views/AllocationManagementDialog.xaml -->
+<Window x:Class="Pack_Track.Views.AllocationManagementDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Equipment Allocation Management"
+        Height="700" Width="1200"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <!-- Styles -->
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#2196F3"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF9800"/>
+        <SolidColorBrush x:Key="BackgroundBrush" Color="#FAFAFA"/>
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#E0E0E0"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#212121"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#757575"/>
+
+        <Style x:Key="ModernButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#1976D2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Background" Value="#CCCCCC"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="8"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource BackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+            <Grid Margin="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="Equipment Allocation Management" FontSize="24" FontWeight="Light" VerticalAlignment="Center"/>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <TextBlock Text="Scene:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox ItemsSource="{Binding Scenes}" SelectedItem="{Binding SelectedScene}" 
+                              DisplayMemberPath="Name" MinWidth="120" Padding="8"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Main Content -->
+        <Grid Grid.Row="1" Margin="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="400"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Add Allocation Panel -->
+            <Border Grid.Column="0" Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Add Equipment Allocation" FontSize="18" FontWeight="Medium" Margin="0,0,0,12"/>
+
+                    <!-- Actor Selection -->
+                    <TextBlock Text="Actor" FontWeight="Medium" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding Cast}" SelectedItem="{Binding SelectedActor}" 
+                              DisplayMemberPath="DisplayName" Margin="0,0,0,12" Padding="8"/>
+
+                    <!-- Product Selection -->
+                    <TextBlock Text="Equipment" FontWeight="Medium" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding Products}" SelectedItem="{Binding SelectedProduct}" 
+                              DisplayMemberPath="Name" Margin="0,0,0,12" Padding="8"/>
+
+                    <!-- Asset Selection (for tracked products only) -->
+                    <TextBlock Text="Asset Number" FontWeight="Medium" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding AvailableAssets}" SelectedItem="{Binding SelectedAssetNumber}" 
+                              Margin="0,0,0,12" Padding="8"/>
+
+                    <!-- Scene Selection -->
+                    <TextBlock Text="Select Scenes" FontWeight="Medium" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Content="Select All" Command="{Binding SelectAllScenesCommand}" 
+                                Background="#4CAF50" Style="{StaticResource ModernButtonStyle}" Margin="0,0,4,0"/>
+                        <Button Grid.Column="1" Content="Deselect All" Command="{Binding DeselectAllScenesCommand}" 
+                                Background="#757575" Style="{StaticResource ModernButtonStyle}" Margin="4,0,0,0"/>
+                    </Grid>
+
+                    <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto" Margin="0,0,0,12">
+                        <ItemsControl ItemsSource="{Binding SceneSelections}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="4" Margin="0,0,0,2">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" 
+                                                      IsEnabled="{Binding IsEnabled}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding DisplayName}" FontWeight="Medium"/>
+                                                <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="Red"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <Button Content="Add Allocation" Style="{StaticResource ModernButtonStyle}" 
+                            Command="{Binding AddAllocationCommand}" HorizontalAlignment="Left"/>
+
+                    <TextBlock Text="Tips:" FontWeight="Medium" Margin="0,24,0,8"/>
+                    <TextBlock Text="• Select specific scenes for flexible equipment swaps" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <TextBlock Text="• Greyed out scenes show existing conflicts" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <TextBlock Text="• Use Select All for equipment needed throughout the show" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Current Allocations -->
+            <Border Grid.Column="1" Style="{StaticResource CardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Current Allocations" FontSize="18" FontWeight="Medium" Margin="0,0,0,12"/>
+
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Allocations}" SelectedItem="{Binding SelectedAllocation}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" 
+                              GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                              Background="White" BorderThickness="0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Actor" Binding="{Binding ActorName}" Width="200"/>
+                            <DataGridTextColumn Header="Equipment" Binding="{Binding DisplayText}" Width="250"/>
+                            <DataGridTextColumn Header="Scene Range" Binding="{Binding SceneRange}" Width="120"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Remove Selected" Background="#F44336" Style="{StaticResource ModernButtonStyle}"
+                                Command="{Binding RemoveAllocationCommand}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
+            <Grid Margin="16,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="Assign equipment to actors for specific scenes. Equipment allocations persist across all runs of the show." 
+                           VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+
+                <Button Grid.Column="1" Content="Done" Style="{StaticResource ModernButtonStyle}" Click="CloseButton_Click"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
