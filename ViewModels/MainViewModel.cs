@@ -1,4 +1,4 @@
-﻿// ViewModels/MainViewModel.cs
+﻿// ViewModels/MainViewModel.cs - Enhanced Tracking Only
 using Pack_Track.Models;
 using Pack_Track.Services;
 using System.Collections.ObjectModel;
@@ -15,7 +15,8 @@ namespace Pack_Track.ViewModels
         private Show? _currentShow;
         private string _currentShowPath = string.Empty;
         private string _statusMessage = "Ready";
-        private LiveOperationsViewModel? _liveOperationsViewModel;
+        private SceneBySceneLiveOperationsViewModel? _enhancedLiveOperationsViewModel;
+        private Scene? _selectedSceneFromButtons;
 
         public MainViewModel(IDataService dataService)
         {
@@ -26,10 +27,11 @@ namespace Pack_Track.ViewModels
             LoadShowCommand = new RelayCommand(LoadShow);
             SaveShowCommand = new RelayCommand(SaveShow, () => CurrentShow != null);
             SaveShowAsCommand = new RelayCommand(SaveShowAs, () => CurrentShow != null);
-            NextSceneCommand = new RelayCommand(NextScene, CanNextScene);
-            PreviousSceneCommand = new RelayCommand(PreviousScene, CanPreviousScene);
             ManageProductsCommand = new RelayCommand(ManageProducts);
             SetupShowCommand = new RelayCommand(SetupShow);
+            JumpToSceneCommand = new RelayCommand<Scene>(JumpToScene);
+
+            SceneButtonCommands = new ObservableCollection<SceneButtonViewModel>();
 
             // Try to load the last show, or create a new one
             _ = InitializeAsync();
@@ -72,14 +74,23 @@ namespace Pack_Track.ViewModels
                 if (SetProperty(ref _currentShow, value))
                 {
                     UpdateLiveOperations();
+                    UpdateSceneButtons();
                 }
             }
         }
 
-        public LiveOperationsViewModel? LiveOperationsViewModel
+        public SceneBySceneLiveOperationsViewModel? EnhancedLiveOperationsViewModel
         {
-            get => _liveOperationsViewModel;
-            private set => SetProperty(ref _liveOperationsViewModel, value);
+            get => _enhancedLiveOperationsViewModel;
+            private set => SetProperty(ref _enhancedLiveOperationsViewModel, value);
+        }
+
+        public ObservableCollection<SceneButtonViewModel> SceneButtonCommands { get; }
+
+        public Scene? SelectedSceneFromButtons
+        {
+            get => _selectedSceneFromButtons;
+            set => SetProperty(ref _selectedSceneFromButtons, value);
         }
 
         public string StatusMessage
@@ -97,10 +108,9 @@ namespace Pack_Track.ViewModels
         public ICommand LoadShowCommand { get; }
         public ICommand SaveShowCommand { get; }
         public ICommand SaveShowAsCommand { get; }
-        public ICommand NextSceneCommand { get; }
-        public ICommand PreviousSceneCommand { get; }
         public ICommand ManageProductsCommand { get; }
         public ICommand SetupShowCommand { get; }
+        public ICommand JumpToSceneCommand { get; }
 
         private void NewShow()
         {
@@ -108,18 +118,51 @@ namespace Pack_Track.ViewModels
             _currentShowPath = string.Empty;
             StatusMessage = "New show created";
             OnPropertyChanged(nameof(WindowTitle));
-            UpdateLiveOperations();
         }
 
-        private void UpdateLiveOperations()
+        private async void UpdateLiveOperations()
         {
             if (CurrentShow != null && CurrentShow.Cast.Any() && CurrentShow.Scenes.Any())
             {
-                LiveOperationsViewModel = new LiveOperationsViewModel(CurrentShow, _dataService);
+                try
+                {
+                    var products = await _dataService.LoadProductsAsync();
+                    EnhancedLiveOperationsViewModel = new SceneBySceneLiveOperationsViewModel(CurrentShow, products, _dataService);
+                }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"Error loading live operations: {ex.Message}";
+                    EnhancedLiveOperationsViewModel = null;
+                }
             }
             else
             {
-                LiveOperationsViewModel = null;
+                EnhancedLiveOperationsViewModel = null;
+            }
+        }
+
+        private void UpdateSceneButtons()
+        {
+            SceneButtonCommands.Clear();
+
+            if (CurrentShow?.Scenes != null)
+            {
+                foreach (var scene in CurrentShow.Scenes.OrderBy(s => s.SceneNumber))
+                {
+                    SceneButtonCommands.Add(new SceneButtonViewModel(scene));
+                }
+            }
+        }
+
+        private void JumpToScene(Scene? scene)
+        {
+            if (scene != null)
+            {
+                SelectedSceneFromButtons = scene;
+                StatusMessage = $"Jumped to {scene.Name}";
+
+                // Trigger a property change to notify the UI to scroll to this scene
+                OnPropertyChanged(nameof(SelectedSceneFromButtons));
             }
         }
 
@@ -182,46 +225,6 @@ namespace Pack_Track.ViewModels
             }
         }
 
-        private void NextScene()
-        {
-            if (CurrentShow != null && CurrentShow.CurrentSceneIndex < CurrentShow.Scenes.Count - 1)
-            {
-                CurrentShow.CurrentSceneIndex++;
-                OnPropertyChanged(nameof(CurrentShow));
-                UpdateLiveOperationsScene();
-                StatusMessage = $"Advanced to scene {CurrentShow.CurrentSceneIndex + 1}: {CurrentShow.CurrentScene?.Name}";
-            }
-        }
-
-        private bool CanNextScene()
-        {
-            return CurrentShow != null && CurrentShow.CurrentSceneIndex < CurrentShow.Scenes.Count - 1;
-        }
-
-        private void PreviousScene()
-        {
-            if (CurrentShow != null && CurrentShow.CurrentSceneIndex > 0)
-            {
-                CurrentShow.CurrentSceneIndex--;
-                OnPropertyChanged(nameof(CurrentShow));
-                UpdateLiveOperationsScene();
-                StatusMessage = $"Moved to scene {CurrentShow.CurrentSceneIndex + 1}: {CurrentShow.CurrentScene?.Name}";
-            }
-        }
-
-        private bool CanPreviousScene()
-        {
-            return CurrentShow != null && CurrentShow.CurrentSceneIndex > 0;
-        }
-
-        private void UpdateLiveOperationsScene()
-        {
-            if (LiveOperationsViewModel != null && CurrentShow != null)
-            {
-                LiveOperationsViewModel.CurrentScene = CurrentShow.CurrentScene;
-            }
-        }
-
         private void ManageProducts()
         {
             var productWindow = new Pack_Track.Views.ProductManagementWindow();
@@ -248,8 +251,21 @@ namespace Pack_Track.ViewModels
             {
                 OnPropertyChanged(nameof(CurrentShow));
                 UpdateLiveOperations();
+                UpdateSceneButtons();
                 StatusMessage = "Show setup completed - data refreshed";
             }
         }
+    }
+
+    public class SceneButtonViewModel : BaseViewModel
+    {
+        public SceneButtonViewModel(Scene scene)
+        {
+            Scene = scene;
+        }
+
+        public Scene Scene { get; }
+        public string ButtonText => $"Scene {Scene.SceneNumber}";
+        public string ToolTip => Scene.Name;
     }
 }

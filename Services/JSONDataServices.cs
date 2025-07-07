@@ -1,7 +1,8 @@
-﻿// Services/JsonDataService.cs
+﻿// Services/JsonDataService.cs - Final Fixed Version (No AppSettings at all)
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Collections.ObjectModel;
 using Pack_Track.Models;
 
 namespace Pack_Track.Services
@@ -67,9 +68,16 @@ namespace Pack_Track.Services
                 if (!File.Exists(_settingsFile)) return null;
 
                 var json = await File.ReadAllTextAsync(_settingsFile);
-                var settings = JsonSerializer.Deserialize<AppSettings>(json, _jsonOptions);
 
-                return settings?.LastShowPath;
+                // Use a simple dictionary approach to avoid any class conflicts
+                var settingsDict = JsonSerializer.Deserialize<Dictionary<string, string>>(json, _jsonOptions);
+
+                if (settingsDict != null && settingsDict.ContainsKey("lastShowPath"))
+                {
+                    return settingsDict["lastShowPath"];
+                }
+
+                return null;
             }
             catch
             {
@@ -81,8 +89,13 @@ namespace Pack_Track.Services
         {
             try
             {
-                var settings = new AppSettings { LastShowPath = filePath };
-                var json = JsonSerializer.Serialize(settings, _jsonOptions);
+                // Use a simple dictionary approach to avoid any class conflicts
+                var settingsDict = new Dictionary<string, string>
+                {
+                    { "lastShowPath", filePath }
+                };
+
+                var json = JsonSerializer.Serialize(settingsDict, _jsonOptions);
                 await File.WriteAllTextAsync(_settingsFile, json);
             }
             catch
@@ -107,7 +120,7 @@ namespace Pack_Track.Services
                 foreach (var product in products)
                 {
                     if (product.Accessories == null)
-                        product.Accessories = new List<Product>();
+                        product.Accessories = new ObservableCollection<Product>();
                 }
 
                 return products;
@@ -149,55 +162,93 @@ namespace Pack_Track.Services
             var jsonDocument = JsonDocument.ParseValue(ref reader);
             var jsonObject = jsonDocument.RootElement;
 
+            Product product;
+
             // Determine product type by checking for specific properties
             if (jsonObject.TryGetProperty("assetNumber", out _))
             {
-                var product = JsonSerializer.Deserialize<TrackedProduct>(jsonObject.GetRawText(), options)!;
-                // Ensure accessories list is initialized
-                if (product.Accessories == null)
-                    product.Accessories = new List<Product>();
-                return product;
+                product = JsonSerializer.Deserialize<TrackedProduct>(jsonObject.GetRawText(), options)!;
             }
-            else if (jsonObject.TryGetProperty("quantityTotal", out _))
+            else if (jsonObject.TryGetProperty("quantityTotal", out _) || jsonObject.TryGetProperty("quantityAvailable", out _))
             {
-                var product = JsonSerializer.Deserialize<InventoryProduct>(jsonObject.GetRawText(), options)!;
-                // Ensure accessories list is initialized
-                if (product.Accessories == null)
-                    product.Accessories = new List<Product>();
-                return product;
+                product = JsonSerializer.Deserialize<InventoryProduct>(jsonObject.GetRawText(), options)!;
+            }
+            else
+            {
+                // Default to TrackedProduct if unclear
+                product = JsonSerializer.Deserialize<TrackedProduct>(jsonObject.GetRawText(), options)!;
             }
 
-            // Default to TrackedProduct if unclear
-            var defaultProduct = JsonSerializer.Deserialize<TrackedProduct>(jsonObject.GetRawText(), options)!;
-            if (defaultProduct.Accessories == null)
-                defaultProduct.Accessories = new List<Product>();
-            return defaultProduct;
+            // Initialize accessories as ObservableCollection
+            if (product.Accessories == null)
+            {
+                product.Accessories = new ObservableCollection<Product>();
+            }
+            else if (!(product.Accessories is ObservableCollection<Product>))
+            {
+                // Convert List<Product> to ObservableCollection<Product>
+                var accessoriesList = product.Accessories.ToList();
+                product.Accessories = new ObservableCollection<Product>(accessoriesList);
+            }
+
+            // Load accessories recursively if they exist in JSON
+            if (jsonObject.TryGetProperty("accessories", out var accessoriesElement) && accessoriesElement.ValueKind == JsonValueKind.Array)
+            {
+                var accessories = new ObservableCollection<Product>();
+                foreach (var accessoryElement in accessoriesElement.EnumerateArray())
+                {
+                    var accessory = JsonSerializer.Deserialize<Product>(accessoryElement.GetRawText(), options);
+                    if (accessory != null)
+                    {
+                        // Ensure accessories of accessories are also ObservableCollection
+                        if (accessory.Accessories == null)
+                            accessory.Accessories = new ObservableCollection<Product>();
+
+                        accessories.Add(accessory);
+                    }
+                }
+                product.Accessories = accessories;
+            }
+
+            return product;
         }
 
         public override void Write(Utf8JsonWriter writer, Product value, JsonSerializerOptions options)
         {
-            // Create a simplified version for serialization to avoid circular references
-            var productData = new Dictionary<string, object>
-            {
-                ["id"] = value.Id,
-                ["name"] = value.Name,
-                ["description"] = value.Description,
-                ["photoPath"] = value.PhotoPath,
-                ["replacementCost"] = value.ReplacementCost,
-                ["accessories"] = value.Accessories.Select(a => new { id = a.Id, name = a.Name }).ToList()
-            };
+            writer.WriteStartObject();
 
+            // Write base Product properties
+            writer.WriteString("id", value.Id.ToString());
+            writer.WriteString("name", value.Name);
+            writer.WriteString("description", value.Description);
+            writer.WriteString("photoPath", value.PhotoPath);
+            writer.WriteNumber("replacementCost", value.ReplacementCost);
+
+            // Write type-specific properties
             if (value is TrackedProduct trackedProduct)
             {
-                productData["assetNumber"] = trackedProduct.AssetNumber;
+                writer.WriteString("assetNumber", trackedProduct.AssetNumber);
             }
             else if (value is InventoryProduct inventoryProduct)
             {
-                productData["quantityTotal"] = inventoryProduct.QuantityTotal;
-                productData["quantityAvailable"] = inventoryProduct.QuantityAvailable;
+                writer.WriteNumber("quantityTotal", inventoryProduct.QuantityTotal);
+                writer.WriteNumber("quantityAvailable", inventoryProduct.QuantityAvailable);
             }
 
-            JsonSerializer.Serialize(writer, productData, options);
+            // Write accessories array
+            writer.WritePropertyName("accessories");
+            writer.WriteStartArray();
+
+            if (value.Accessories != null)
+            {
+                foreach (var accessory in value.Accessories)
+                {
+                    JsonSerializer.Serialize(writer, accessory, options);
+                }
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
         }
     }
 }

@@ -1,14 +1,16 @@
-﻿using System.ComponentModel;
+﻿// Models/Product.cs - Make sure Product is not abstract
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 namespace Pack_Track.Models
 {
-    public abstract class Product : INotifyPropertyChanged
+    public class Product : INotifyPropertyChanged
     {
         private string _name = string.Empty;
         private string _description = string.Empty;
-        private string _photoPath = string.Empty;
         private decimal _replacementCost;
+        private string _photoPath = string.Empty;
 
         public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -24,22 +26,29 @@ namespace Pack_Track.Models
             set => SetProperty(ref _description, value);
         }
 
-        public string PhotoPath
-        {
-            get => _photoPath;
-            set => SetProperty(ref _photoPath, value);
-        }
-
         public decimal ReplacementCost
         {
             get => _replacementCost;
             set => SetProperty(ref _replacementCost, value);
         }
 
-        public List<Product> Accessories { get; set; } = new List<Product>();
+        public string PhotoPath
+        {
+            get => _photoPath;
+            set => SetProperty(ref _photoPath, value);
+        }
 
-        // Helper property to check if this product has accessories
-        public bool HasAccessories => Accessories.Any();
+        public ObservableCollection<Product> Accessories { get; set; } = new ObservableCollection<Product>();
+
+        // Helper method for safely copying accessories
+        public void CopyAccessoriesFrom(ObservableCollection<Product> sourceAccessories)
+        {
+            Accessories.Clear();
+            foreach (var accessory in sourceAccessories)
+            {
+                Accessories.Add(accessory);
+            }
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -54,35 +63,6 @@ namespace Pack_Track.Models
             field = value;
             OnPropertyChanged(propertyName);
             return true;
-        }
-    }
-
-    public class TrackedProduct : Product
-    {
-        private string _assetNumber = string.Empty;
-
-        public string AssetNumber
-        {
-            get => _assetNumber;
-            set => SetProperty(ref _assetNumber, value);
-        }
-    }
-
-    public class InventoryProduct : Product
-    {
-        private int _quantityAvailable;
-        private int _quantityTotal;
-
-        public int QuantityAvailable
-        {
-            get => _quantityAvailable;
-            set => SetProperty(ref _quantityAvailable, value);
-        }
-
-        public int QuantityTotal
-        {
-            get => _quantityTotal;
-            set => SetProperty(ref _quantityTotal, value);
         }
     }
 }

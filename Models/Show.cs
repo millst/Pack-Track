@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace Pack_Track.Models
 {
-    public class Show : INotifyPropertyChanged
+    public partial class Show : INotifyPropertyChanged
     {
         private string _name = string.Empty;
         private string _description = string.Empty;
@@ -33,16 +33,12 @@ namespace Pack_Track.Models
         public List<Run> Runs { get; set; } = new List<Run>();
         public List<Actor> Cast { get; set; } = new List<Actor>();
 
+        private Scene? _currentScene;
+
         public Scene? CurrentScene
         {
-            get
-            {
-                if (CurrentSceneIndex >= 0 && CurrentSceneIndex < Scenes.Count)
-                {
-                    return Scenes[CurrentSceneIndex];
-                }
-                return null;
-            }
+            get => _currentScene;
+            set => SetProperty(ref _currentScene, value);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -65,6 +61,7 @@ namespace Pack_Track.Models
     {
         private string _name = string.Empty;
         private int _sceneNumber;
+        public string DisplayName => $"Scene {SceneNumber}: {Name}";
 
         public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -231,4 +228,16 @@ namespace Pack_Track.Models
         Lost,
         Damaged
     }
+
+    
+        public enum EquipmentStatus
+        {
+            Available,
+            CheckedOut,
+            CheckedIn,
+            Missing,
+            Damaged
+        }
+    
+
 }

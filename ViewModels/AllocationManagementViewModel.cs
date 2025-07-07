@@ -1,4 +1,4 @@
-﻿// ViewModels/AllocationManagementViewModel.cs
+﻿// ViewModels/AllocationManagementViewModel.cs - Fixed version
 using Pack_Track.Models;
 using Pack_Track.Services;
 using System.Collections.ObjectModel;
@@ -22,7 +22,7 @@ namespace Pack_Track.ViewModels
             _dataService = dataService;
 
             Cast = new ObservableCollection<Actor>(show.Cast);
-            Scenes = new ObservableCollection<Scene>(show.Scenes);
+            Scenes = new ObservableCollection<Scene>(show.Scenes.OrderBy(s => s.SceneNumber));
             Products = new ObservableCollection<Product>(products);
             AvailableAssets = new ObservableCollection<string>();
             Allocations = new ObservableCollection<AllocationDisplayItem>();
@@ -32,9 +32,15 @@ namespace Pack_Track.ViewModels
             RemoveAllocationCommand = new RelayCommand(RemoveAllocation, () => SelectedAllocation != null);
             SelectAllScenesCommand = new RelayCommand(SelectAllScenes);
             DeselectAllScenesCommand = new RelayCommand(DeselectAllScenes);
+            SelectSceneCommand = new RelayCommand<Scene>(SelectScene);
 
             InitializeSceneSelections();
-            LoadAllocations();
+
+            // Select first scene by default
+            if (Scenes.Any())
+            {
+                SelectedScene = Scenes.First();
+            }
         }
 
         public ObservableCollection<Actor> Cast { get; }
@@ -52,6 +58,7 @@ namespace Pack_Track.ViewModels
                 if (SetProperty(ref _selectedScene, value))
                 {
                     LoadAllocations();
+                    UpdateSceneAvailability();
                 }
             }
         }
@@ -98,6 +105,7 @@ namespace Pack_Track.ViewModels
         public ICommand RemoveAllocationCommand { get; }
         public ICommand SelectAllScenesCommand { get; }
         public ICommand DeselectAllScenesCommand { get; }
+        public ICommand SelectSceneCommand { get; }
 
         private void InitializeSceneSelections()
         {
@@ -248,49 +256,33 @@ namespace Pack_Track.ViewModels
         {
             Allocations.Clear();
 
-            if (SelectedScene == null && Scenes.Any())
-            {
-                SelectedScene = Scenes.First();
-            }
+            if (SelectedScene == null) return;
 
-            if (SelectedScene != null)
+            // FIXED: Only show allocations for the selected scene
+            foreach (var allocation in SelectedScene.Allocations)
             {
-                // Create a HashSet to track unique allocations by ID
-                var processedAllocations = new HashSet<Guid>();
+                var actor = Cast.FirstOrDefault(a => a.Id == allocation.ActorId);
+                var product = Products.FirstOrDefault(p => p.Id == allocation.ProductId);
 
-                foreach (var allocation in SelectedScene.Allocations)
+                if (actor != null && product != null)
                 {
-                    // Skip if we've already processed this allocation
-                    if (processedAllocations.Contains(allocation.Id))
-                        continue;
-
-                    processedAllocations.Add(allocation.Id);
-
-                    var actor = Cast.FirstOrDefault(a => a.Id == allocation.ActorId);
-                    var product = Products.FirstOrDefault(p => p.Id == allocation.ProductId);
-
-                    if (actor != null && product != null)
+                    Allocations.Add(new AllocationDisplayItem
                     {
-                        Allocations.Add(new AllocationDisplayItem
-                        {
-                            AllocationId = allocation.Id,
-                            ActorName = actor.DisplayName,
-                            ProductName = product.Name,
-                            AssetInfo = allocation.AssetInfo,
-                            FromScene = allocation.FromScene,
-                            ToScene = allocation.ToScene,
-                            SceneRange = allocation.FromScene == allocation.ToScene
-                                ? $"Scene {allocation.FromScene}"
-                                : $"Scenes {allocation.FromScene}-{allocation.ToScene}"
-                        });
-                    }
+                        AllocationId = allocation.Id,
+                        ActorName = actor.DisplayName,
+                        ProductName = product.Name,
+                        AssetInfo = allocation.AssetInfo,
+                        FromScene = allocation.FromScene,
+                        ToScene = allocation.ToScene,
+                        SceneRange = $"Scene {allocation.FromScene}"
+                    });
                 }
             }
         }
 
         private void RemoveAllocation()
         {
-            if (SelectedAllocation == null) return;
+            if (SelectedAllocation == null || SelectedScene == null) return;
 
             var result = MessageBox.Show(
                 $"Remove {SelectedAllocation.ProductName} from {SelectedAllocation.ActorName}?",
@@ -300,14 +292,19 @@ namespace Pack_Track.ViewModels
 
             if (result == MessageBoxResult.Yes)
             {
-                // Remove from all scenes that contain this allocation
-                foreach (var scene in Scenes)
-                {
-                    scene.Allocations.RemoveAll(a => a.Id == SelectedAllocation.AllocationId);
-                }
+                // Remove only from the current scene
+                SelectedScene.Allocations.RemoveAll(a => a.Id == SelectedAllocation.AllocationId);
 
                 LoadAllocations();
                 UpdateSceneAvailability();
+            }
+        }
+
+        private void SelectScene(Scene? scene)
+        {
+            if (scene != null)
+            {
+                SelectedScene = scene;
             }
         }
     }

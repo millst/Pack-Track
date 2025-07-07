@@ -1,4 +1,4 @@
-﻿// ViewModels/ShowSetupViewModel.cs
+﻿// ViewModels/ShowSetupViewModel.cs - Fixed version
 using Pack_Track.Models;
 using Pack_Track.Services;
 using System.Collections.ObjectModel;
@@ -9,101 +9,86 @@ namespace Pack_Track.ViewModels
 {
     public class ShowSetupViewModel : BaseViewModel
     {
+        private readonly Show _show;
         private readonly IDataService _dataService;
-        private Show _currentShow;
-        private Actor? _selectedActor;
-        private Scene? _selectedScene;
-        private Run? _selectedRun;
-        private string _newActorRole = string.Empty;
-        private string _newActorName = string.Empty;
-        private string _newActorPhone = string.Empty;
+        private List<Product> _allProducts = new List<Product>();
+
+        // Show details
+        private string _showName;
+        private string _showDescription = string.Empty;
+
+        // New scene
         private string _newSceneName = string.Empty;
-        private int _newSceneNumber = 1;
+        private int _newSceneNumber;
+
+        // New cast member
+        private string _newActorName = string.Empty;
+        private string _newActorRole = string.Empty;
+        private string _newActorPhone = string.Empty;
+
+        // New run
         private string _newRunName = string.Empty;
-        private DateTime _newRunDateTime = DateTime.Now;
-        private RunType _newRunType = RunType.Rehearsal;
+        private DateTime _newRunDate = DateTime.Today;
+        private TimeSpan _newRunTime = new TimeSpan(19, 30, 0); // 7:30 PM default
 
         public ShowSetupViewModel(Show show, IDataService dataService)
         {
-            _currentShow = show;
+            _show = show;
             _dataService = dataService;
 
             // Initialize collections
-            Cast = new ObservableCollection<Actor>(_currentShow.Cast);
-            Scenes = new ObservableCollection<Scene>(_currentShow.Scenes);
-            Runs = new ObservableCollection<Run>(_currentShow.Runs);
-            Products = new ObservableCollection<Product>();
+            Scenes = new ObservableCollection<Scene>(show.Scenes.OrderBy(s => s.SceneNumber));
+            Cast = new ObservableCollection<Actor>(show.Cast);
+            Runs = new ObservableCollection<Run>(show.Runs.OrderBy(r => r.DateTime));
 
-            // Initialize commands
-            AddActorCommand = new RelayCommand(AddActor, CanAddActor);
-            EditActorCommand = new RelayCommand(EditActor, () => SelectedActor != null);
-            DeleteActorCommand = new RelayCommand(DeleteActor, () => SelectedActor != null);
+            // Initialize properties
+            _showName = show.Name;
+            ShowDescription = show.Description;
 
-            AddSceneCommand = new RelayCommand(AddScene, CanAddScene);
-            EditSceneCommand = new RelayCommand(EditScene, () => SelectedScene != null);
-            DeleteSceneCommand = new RelayCommand(DeleteScene, () => SelectedScene != null);
+            // Set default scene number to next available
+            UpdateNewSceneNumber();
 
-            AddRunCommand = new RelayCommand(AddRun, CanAddRun);
-            EditRunCommand = new RelayCommand(EditRun, () => SelectedRun != null);
-            DeleteRunCommand = new RelayCommand(DeleteRun, () => SelectedRun != null);
-
-            ManageAllocationsCommand = new RelayCommand(ManageAllocations, CanManageAllocations);
-
-            SaveShowCommand = new RelayCommand(SaveShow);
+            // Commands
+            AddSceneCommand = new RelayCommand(AddScene, () => !string.IsNullOrWhiteSpace(NewSceneName));
+            RemoveSceneCommand = new RelayCommand(RemoveScene, () => SelectedScene != null);
+            AddCastMemberCommand = new RelayCommand(AddCastMember, () => !string.IsNullOrWhiteSpace(NewActorName));
+            RemoveCastMemberCommand = new RelayCommand(RemoveCastMember, () => SelectedActor != null);
+            AddRunCommand = new RelayCommand(AddRun, () => !string.IsNullOrWhiteSpace(NewRunName));
+            RemoveRunCommand = new RelayCommand(RemoveRun, () => SelectedRun != null);
+            ManageAllocationsCommand = new RelayCommand(ManageAllocations, () => Scenes.Any() && Cast.Any());
 
             LoadProducts();
         }
 
-        // Properties
-        public Show CurrentShow
-        {
-            get => _currentShow;
-            set => SetProperty(ref _currentShow, value);
-        }
-
-        public ObservableCollection<Actor> Cast { get; }
         public ObservableCollection<Scene> Scenes { get; }
+        public ObservableCollection<Actor> Cast { get; }
         public ObservableCollection<Run> Runs { get; }
-        public ObservableCollection<Product> Products { get; }
 
-        public Actor? SelectedActor
+        public string ShowName
         {
-            get => _selectedActor;
-            set => SetProperty(ref _selectedActor, value);
+            get => _showName;
+            set
+            {
+                if (SetProperty(ref _showName, value))
+                {
+                    _show.Name = value;
+                }
+            }
         }
 
-        public Scene? SelectedScene
+        public string ShowDescription
         {
-            get => _selectedScene;
-            set => SetProperty(ref _selectedScene, value);
+            get => _showDescription;
+            set
+            {
+                if (SetProperty(ref _showDescription, value))
+                {
+                    _show.Description = value;
+                }
+            }
         }
 
-        public Run? SelectedRun
-        {
-            get => _selectedRun;
-            set => SetProperty(ref _selectedRun, value);
-        }
-
-        // New Actor Properties
-        public string NewActorRole
-        {
-            get => _newActorRole;
-            set => SetProperty(ref _newActorRole, value);
-        }
-
-        public string NewActorName
-        {
-            get => _newActorName;
-            set => SetProperty(ref _newActorName, value);
-        }
-
-        public string NewActorPhone
-        {
-            get => _newActorPhone;
-            set => SetProperty(ref _newActorPhone, value);
-        }
-
-        // New Scene Properties
+        // Scene properties
         public string NewSceneName
         {
             get => _newSceneName;
@@ -116,261 +101,237 @@ namespace Pack_Track.ViewModels
             set => SetProperty(ref _newSceneNumber, value);
         }
 
-        // New Run Properties
+        private Scene? _selectedScene;
+        public Scene? SelectedScene
+        {
+            get => _selectedScene;
+            set => SetProperty(ref _selectedScene, value);
+        }
+
+        // Cast properties
+        public string NewActorName
+        {
+            get => _newActorName;
+            set => SetProperty(ref _newActorName, value);
+        }
+
+        public string NewActorRole
+        {
+            get => _newActorRole;
+            set => SetProperty(ref _newActorRole, value);
+        }
+
+        public string NewActorPhone
+        {
+            get => _newActorPhone;
+            set => SetProperty(ref _newActorPhone, value);
+        }
+
+        private Actor? _selectedActor;
+        public Actor? SelectedActor
+        {
+            get => _selectedActor;
+            set => SetProperty(ref _selectedActor, value);
+        }
+
+        // Run properties
         public string NewRunName
         {
             get => _newRunName;
             set => SetProperty(ref _newRunName, value);
         }
 
-        public DateTime NewRunDateTime
+        public DateTime NewRunDate
         {
-            get => _newRunDateTime;
-            set => SetProperty(ref _newRunDateTime, value);
+            get => _newRunDate;
+            set => SetProperty(ref _newRunDate, value);
         }
 
-        public RunType NewRunType
+        public TimeSpan NewRunTime
         {
-            get => _newRunType;
-            set => SetProperty(ref _newRunType, value);
+            get => _newRunTime;
+            set => SetProperty(ref _newRunTime, value);
         }
 
-        public Array RunTypes => Enum.GetValues(typeof(RunType));
+        private Run? _selectedRun;
+        public Run? SelectedRun
+        {
+            get => _selectedRun;
+            set => SetProperty(ref _selectedRun, value);
+        }
 
         // Commands
-        public ICommand AddActorCommand { get; }
-        public ICommand EditActorCommand { get; }
-        public ICommand DeleteActorCommand { get; }
         public ICommand AddSceneCommand { get; }
-        public ICommand EditSceneCommand { get; }
-        public ICommand DeleteSceneCommand { get; }
+        public ICommand RemoveSceneCommand { get; }
+        public ICommand AddCastMemberCommand { get; }
+        public ICommand RemoveCastMemberCommand { get; }
         public ICommand AddRunCommand { get; }
-        public ICommand EditRunCommand { get; }
-        public ICommand DeleteRunCommand { get; }
+        public ICommand RemoveRunCommand { get; }
         public ICommand ManageAllocationsCommand { get; }
-        public ICommand SaveShowCommand { get; }
 
-        // Actor Management
-        private void AddActor()
+        private async void LoadProducts()
         {
-            var actor = new Actor
+            try
             {
-                RoleName = NewActorRole.Trim(),
-                RealName = NewActorName.Trim(),
-                PhoneNumber = NewActorPhone.Trim()
-            };
-
-            Cast.Add(actor);
-            CurrentShow.Cast.Add(actor);
-
-            // Clear form
-            NewActorRole = string.Empty;
-            NewActorName = string.Empty;
-            NewActorPhone = string.Empty;
-        }
-
-        private bool CanAddActor()
-        {
-            return !string.IsNullOrWhiteSpace(NewActorRole) || !string.IsNullOrWhiteSpace(NewActorName);
-        }
-
-        private void EditActor()
-        {
-            if (SelectedActor == null) return;
-
-            var dialog = new Views.ActorEditDialog(SelectedActor);
-            if (dialog.ShowDialog() == true)
+                _allProducts = await _dataService.LoadProductsAsync();
+            }
+            catch (Exception ex)
             {
-                // Actor is updated by reference
-                OnPropertyChanged(nameof(Cast));
+                MessageBox.Show($"Error loading products: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void DeleteActor()
+        private void UpdateNewSceneNumber()
         {
-            if (SelectedActor == null) return;
-
-            var result = MessageBox.Show(
-                $"Are you sure you want to delete '{SelectedActor.DisplayName}'?\nThis will also remove all their equipment allocations.",
-                "Confirm Delete",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (result == MessageBoxResult.Yes)
+            // Find the highest scene number and add 1
+            if (Scenes.Any())
             {
-                // Remove allocations for this actor
-                foreach (var scene in Scenes)
-                {
-                    scene.Allocations.RemoveAll(a => a.ActorId == SelectedActor.Id);
-                }
-
-                Cast.Remove(SelectedActor);
-                CurrentShow.Cast.Remove(SelectedActor);
-                SelectedActor = null;
+                NewSceneNumber = Scenes.Max(s => s.SceneNumber) + 1;
+            }
+            else
+            {
+                NewSceneNumber = 1;
             }
         }
 
-        // Scene Management
         private void AddScene()
         {
             var scene = new Scene
             {
-                Name = NewSceneName.Trim(),
+                Name = NewSceneName,
                 SceneNumber = NewSceneNumber
             };
 
+            _show.Scenes.Add(scene);
             Scenes.Add(scene);
-            CurrentShow.Scenes.Add(scene);
 
-            // Clear form
+            // Clear form and update scene number for next
             NewSceneName = string.Empty;
-            NewSceneNumber = Scenes.Count + 1;
-        }
+            UpdateNewSceneNumber();
 
-        private bool CanAddScene()
-        {
-            return !string.IsNullOrWhiteSpace(NewSceneName);
-        }
-
-        private void EditScene()
-        {
-            if (SelectedScene == null) return;
-
-            var dialog = new Views.SceneEditDialog(SelectedScene);
-            if (dialog.ShowDialog() == true)
+            // Set current scene if this is the first one
+            if (_show.CurrentScene == null)
             {
-                // Scene is updated by reference
-                OnPropertyChanged(nameof(Scenes));
+                _show.CurrentScene = scene;
             }
         }
 
-        private void DeleteScene()
+        private void RemoveScene()
         {
             if (SelectedScene == null) return;
 
             var result = MessageBox.Show(
-                $"Are you sure you want to delete '{SelectedScene.Name}'?\nThis will also remove all equipment allocations for this scene.",
-                "Confirm Delete",
+                $"Remove scene '{SelectedScene.Name}'? This will also remove all equipment allocations for this scene.",
+                "Confirm Remove Scene",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
 
             if (result == MessageBoxResult.Yes)
             {
+                _show.Scenes.Remove(SelectedScene);
                 Scenes.Remove(SelectedScene);
-                CurrentShow.Scenes.Remove(SelectedScene);
+
+                // Update current scene if we removed it
+                if (_show.CurrentScene?.Id == SelectedScene.Id)
+                {
+                    _show.CurrentScene = Scenes.FirstOrDefault();
+                }
+
                 SelectedScene = null;
+                UpdateNewSceneNumber();
             }
         }
 
-        // Run Management
+        private void AddCastMember()
+        {
+            var actor = new Actor
+            {
+                RealName = NewActorName,
+                RoleName = NewActorRole,
+                PhoneNumber = NewActorPhone
+            };
+
+            _show.Cast.Add(actor);
+            Cast.Add(actor);
+
+            // Clear form
+            NewActorName = string.Empty;
+            NewActorRole = string.Empty;
+            NewActorPhone = string.Empty;
+        }
+
+        private void RemoveCastMember()
+        {
+            if (SelectedActor == null) return;
+
+            var result = MessageBox.Show(
+                $"Remove cast member '{SelectedActor.DisplayName}'? This will also remove all equipment allocations for this actor.",
+                "Confirm Remove Cast Member",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                // Remove all allocations for this actor
+                foreach (var scene in _show.Scenes)
+                {
+                    scene.Allocations.RemoveAll(a => a.ActorId == SelectedActor.Id);
+                }
+
+                _show.Cast.Remove(SelectedActor);
+                Cast.Remove(SelectedActor);
+                SelectedActor = null;
+            }
+        }
+
         private void AddRun()
         {
             var run = new Run
             {
-                Name = NewRunName.Trim(),
-                DateTime = NewRunDateTime,
-                RunType = NewRunType
+                Name = NewRunName,
+                DateTime = NewRunDate.Add(NewRunTime)
             };
 
+            _show.Runs.Add(run);
             Runs.Add(run);
-            CurrentShow.Runs.Add(run);
+
+            // Sort runs by date
+            var sortedRuns = Runs.OrderBy(r => r.DateTime).ToList();
+            Runs.Clear();
+            foreach (var sortedRun in sortedRuns)
+            {
+                Runs.Add(sortedRun);
+            }
 
             // Clear form
             NewRunName = string.Empty;
-            NewRunDateTime = DateTime.Now;
-            NewRunType = RunType.Rehearsal;
+            NewRunDate = DateTime.Today;
+            NewRunTime = new TimeSpan(19, 30, 0);
         }
 
-        private bool CanAddRun()
-        {
-            return !string.IsNullOrWhiteSpace(NewRunName);
-        }
-
-        private void EditRun()
-        {
-            if (SelectedRun == null) return;
-
-            var dialog = new Views.RunEditDialog(SelectedRun);
-            if (dialog.ShowDialog() == true)
-            {
-                // Run is updated by reference
-                OnPropertyChanged(nameof(Runs));
-            }
-        }
-
-        private void DeleteRun()
+        private void RemoveRun()
         {
             if (SelectedRun == null) return;
 
             var result = MessageBox.Show(
-                $"Are you sure you want to delete '{SelectedRun.Name}'?",
-                "Confirm Delete",
+                $"Remove run '{SelectedRun.Name}'?",
+                "Confirm Remove Run",
                 MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
+                MessageBoxImage.Question);
 
             if (result == MessageBoxResult.Yes)
             {
+                _show.Runs.Remove(SelectedRun);
                 Runs.Remove(SelectedRun);
-                CurrentShow.Runs.Remove(SelectedRun);
                 SelectedRun = null;
             }
         }
 
         private void ManageAllocations()
         {
-            var dialog = new Views.AllocationManagementDialog(CurrentShow, Products.ToList());
-            dialog.ShowDialog();
-        }
-
-        private bool CanManageAllocations()
-        {
-            return Cast.Any() && Scenes.Any();
-        }
-
-        private async void SaveShow()
-        {
-            try
-            {
-                // Update the main show object with our changes
-                _currentShow.Cast.Clear();
-                _currentShow.Scenes.Clear();
-                _currentShow.Runs.Clear();
-
-                foreach (var actor in Cast)
-                    _currentShow.Cast.Add(actor);
-                foreach (var scene in Scenes)
-                    _currentShow.Scenes.Add(scene);
-                foreach (var run in Runs)
-                    _currentShow.Runs.Add(run);
-
-                // Trigger save in main window (we'll add an event for this)
-                ShowSaved?.Invoke();
-
-                MessageBox.Show("Show configuration saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error saving show: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        public event Action? ShowSaved;
-
-        private async void LoadProducts()
-        {
-            try
-            {
-                var products = await _dataService.LoadProductsAsync();
-                Products.Clear();
-                foreach (var product in products)
-                {
-                    Products.Add(product);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error loading products: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            var allocationWindow = new Pack_Track.Views.AllocationManagementWindow(_show, _allProducts);
+            allocationWindow.Owner = Application.Current.MainWindow;
+            allocationWindow.ShowDialog();
         }
     }
 }

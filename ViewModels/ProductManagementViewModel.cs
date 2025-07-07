@@ -1,10 +1,11 @@
-﻿using Pack_Track.Models;
+﻿// ViewModels/ProductManagementViewModel.cs - Complete Fixed Version with Debug
+using Pack_Track.Models;
 using Pack_Track.Services;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
-using Microsoft.Win32;
 using System.Windows;
-using Pack_Track.Views;
+using System.Windows.Controls;
+using Microsoft.Win32;
 
 namespace Pack_Track.ViewModels
 {
@@ -12,30 +13,23 @@ namespace Pack_Track.ViewModels
     {
         private readonly IDataService _dataService;
         private Product? _selectedProduct;
-        private string _productName = string.Empty;
-        private string _productDescription = string.Empty;
-        private decimal _replacementCost;
-        private string _photoPath = string.Empty;
-        private bool _isTrackedProduct = true;
+        private string _selectedProductType = "Tracked Product (with asset numbers)";
         private string _assetNumbers = string.Empty;
-        private int _quantityTotal;
-        private bool _isEditMode = false;
+        private int _inventoryQuantity = 1;
 
         public ProductManagementViewModel(IDataService dataService)
         {
             _dataService = dataService;
+
             Products = new ObservableCollection<Product>();
 
-            // Initialize commands
-            AddProductCommand = new RelayCommand(AddProduct);
-            SaveProductCommand = new RelayCommand(SaveProduct, CanSaveProduct);
+            // Commands
+            AddNewProductCommand = new RelayCommand(AddNewProduct);
+            SaveProductCommand = new RelayCommand(SaveProduct, () => SelectedProduct != null);
             DeleteProductCommand = new RelayCommand(DeleteProduct, () => SelectedProduct != null);
-            CancelEditCommand = new RelayCommand(CancelEdit);
-            SelectPhotoCommand = new RelayCommand(SelectPhoto);
-            AddAssetNumbersCommand = new RelayCommand(AddAssetNumbers, () => IsTrackedProduct);
-            ManageAccessoriesCommand = new RelayCommand(ManageAccessories, () => SelectedProduct != null);
-            ImportProductsCommand = new RelayCommand(ImportProducts);
-            ExportProductsCommand = new RelayCommand(ExportProducts);
+            BrowsePhotoCommand = new RelayCommand(BrowsePhoto, () => SelectedProduct != null);
+            AddAccessoryCommand = new RelayCommand(AddAccessory, () => SelectedProduct != null);
+            RemoveAccessoryCommand = new RelayCommand<Product>(RemoveAccessory);
 
             LoadProducts();
         }
@@ -49,193 +43,239 @@ namespace Pack_Track.ViewModels
             {
                 if (SetProperty(ref _selectedProduct, value))
                 {
-                    LoadProductForEdit();
+                    System.Diagnostics.Debug.WriteLine($"SelectedProduct changed to: {value?.Name ?? "null"}");
+                    OnSelectedProductChanged();
+
+                    // Let commands refresh naturally - remove the manual refresh calls
                 }
             }
         }
 
-        public string ProductName
+        public string SelectedProductType
         {
-            get => _productName;
-            set => SetProperty(ref _productName, value);
-        }
-
-        public string ProductDescription
-        {
-            get => _productDescription;
-            set => SetProperty(ref _productDescription, value);
-        }
-
-        public decimal ReplacementCost
-        {
-            get => _replacementCost;
-            set => SetProperty(ref _replacementCost, value);
-        }
-
-        public string PhotoPath
-        {
-            get => _photoPath;
-            set => SetProperty(ref _photoPath, value);
+            get => _selectedProductType;
+            set
+            {
+                if (SetProperty(ref _selectedProductType, value))
+                {
+                    System.Diagnostics.Debug.WriteLine($"SelectedProductType changed to: {value}");
+                    OnPropertyChanged(nameof(IsTrackedProduct));
+                    OnPropertyChanged(nameof(IsInventoryProduct));
+                }
+            }
         }
 
         public bool IsTrackedProduct
         {
-            get => _isTrackedProduct;
-            set => SetProperty(ref _isTrackedProduct, value);
+            get
+            {
+                var isTracked = SelectedProductType.Contains("Tracked");
+                System.Diagnostics.Debug.WriteLine($"IsTrackedProduct: {isTracked}");
+                return isTracked;
+            }
+        }
+
+        public bool IsInventoryProduct
+        {
+            get
+            {
+                var isInventory = SelectedProductType.Contains("Inventory");
+                System.Diagnostics.Debug.WriteLine($"IsInventoryProduct: {isInventory}");
+                return isInventory;
+            }
         }
 
         public string AssetNumbers
         {
             get => _assetNumbers;
-            set => SetProperty(ref _assetNumbers, value);
+            set
+            {
+                if (SetProperty(ref _assetNumbers, value))
+                {
+                    System.Diagnostics.Debug.WriteLine($"AssetNumbers changed to: {value}");
+                }
+            }
         }
 
-        public int QuantityTotal
+        public int InventoryQuantity
         {
-            get => _quantityTotal;
-            set => SetProperty(ref _quantityTotal, value);
+            get => _inventoryQuantity;
+            set
+            {
+                if (SetProperty(ref _inventoryQuantity, value))
+                {
+                    System.Diagnostics.Debug.WriteLine($"InventoryQuantity changed to: {value}");
+                }
+            }
         }
-
-        public bool IsEditMode
-        {
-            get => _isEditMode;
-            set => SetProperty(ref _isEditMode, value);
-        }
-
-        public string SaveButtonText => IsEditMode ? "Update Product" : "Add Product";
 
         // Commands
-        public ICommand AddProductCommand { get; }
+        public ICommand AddNewProductCommand { get; }
         public ICommand SaveProductCommand { get; }
         public ICommand DeleteProductCommand { get; }
-        public ICommand CancelEditCommand { get; }
-        public ICommand SelectPhotoCommand { get; }
-        public ICommand AddAssetNumbersCommand { get; }
-        public ICommand ManageAccessoriesCommand { get; }
-        public ICommand ImportProductsCommand { get; }
-        public ICommand ExportProductsCommand { get; }
+        public ICommand BrowsePhotoCommand { get; }
+        public ICommand AddAccessoryCommand { get; }
+        public ICommand RemoveAccessoryCommand { get; }
 
         private async void LoadProducts()
         {
             try
             {
+                System.Diagnostics.Debug.WriteLine("Loading products...");
                 var products = await _dataService.LoadProductsAsync();
                 Products.Clear();
                 foreach (var product in products)
                 {
                     Products.Add(product);
+                    System.Diagnostics.Debug.WriteLine($"Loaded product: {product.Name}");
                 }
+                System.Diagnostics.Debug.WriteLine($"Total products loaded: {Products.Count}");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error loading products: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Diagnostics.Debug.WriteLine($"Error loading products: {ex.Message}");
+                MessageBox.Show($"Error loading products: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void LoadProductForEdit()
+        private void OnSelectedProductChanged()
         {
+            System.Diagnostics.Debug.WriteLine($"OnSelectedProductChanged called. Product: {SelectedProduct?.Name ?? "null"}");
+
             if (SelectedProduct == null)
             {
-                ClearForm();
+                System.Diagnostics.Debug.WriteLine("SelectedProduct is null, clearing form");
+                AssetNumbers = string.Empty;
+                InventoryQuantity = 1;
+                SelectedProductType = "Tracked Product (with asset numbers)";
                 return;
             }
 
-            IsEditMode = true;
-            ProductName = SelectedProduct.Name;
-            ProductDescription = SelectedProduct.Description;
-            ReplacementCost = SelectedProduct.ReplacementCost;
-            PhotoPath = SelectedProduct.PhotoPath;
+            System.Diagnostics.Debug.WriteLine($"Product type: {SelectedProduct.GetType().Name}");
 
+            // Update form based on selected product
             if (SelectedProduct is TrackedProduct trackedProduct)
             {
-                IsTrackedProduct = true;
-                AssetNumbers = trackedProduct.AssetNumber;
+                System.Diagnostics.Debug.WriteLine($"Setting up TrackedProduct. AssetNumber: {trackedProduct.AssetNumber}");
+                SelectedProductType = "Tracked Product (with asset numbers)";
+                AssetNumbers = trackedProduct.AssetNumber ?? string.Empty;
             }
             else if (SelectedProduct is InventoryProduct inventoryProduct)
             {
-                IsTrackedProduct = false;
-                QuantityTotal = inventoryProduct.QuantityTotal;
+                System.Diagnostics.Debug.WriteLine($"Setting up InventoryProduct. Quantity: {inventoryProduct.QuantityTotal}");
+                SelectedProductType = "Inventory Product (quantity only)";
+                InventoryQuantity = inventoryProduct.QuantityTotal;
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("Unknown product type, defaulting to TrackedProduct");
+                SelectedProductType = "Tracked Product (with asset numbers)";
+                AssetNumbers = string.Empty;
             }
 
-            OnPropertyChanged(nameof(SaveButtonText));
+            System.Diagnostics.Debug.WriteLine($"Form updated. SelectedProductType: {SelectedProductType}");
         }
 
-        private void AddProduct()
+        private void AddNewProduct()
         {
-            ClearForm();
-            IsEditMode = false;
-            ProductName = "New Product";
-            OnPropertyChanged(nameof(SaveButtonText));
+            System.Diagnostics.Debug.WriteLine("AddNewProduct called");
+
+            var newProduct = new TrackedProduct
+            {
+                Name = "New Product",
+                Description = "Enter description here",
+                ReplacementCost = 0.00m,
+                AssetNumber = "Asset1"
+            };
+
+            System.Diagnostics.Debug.WriteLine($"Created new product: {newProduct.Name}");
+            Products.Add(newProduct);
+            SelectedProduct = newProduct;
+
+            System.Diagnostics.Debug.WriteLine($"Product added. Total products: {Products.Count}");
+            System.Diagnostics.Debug.WriteLine($"SelectedProduct set to: {SelectedProduct?.Name}");
         }
 
         private async void SaveProduct()
         {
+            if (SelectedProduct == null) return;
+
             try
             {
-                Product product;
+                System.Diagnostics.Debug.WriteLine($"Saving product: {SelectedProduct.Name}");
 
-                if (IsEditMode && SelectedProduct != null)
+                // Update product based on type selection
+                if (IsTrackedProduct && !(SelectedProduct is TrackedProduct))
                 {
-                    // Update existing product
-                    product = SelectedProduct;
+                    System.Diagnostics.Debug.WriteLine("Converting to TrackedProduct");
+                    // Convert to TrackedProduct
+                    var trackedProduct = new TrackedProduct
+                    {
+                        Id = SelectedProduct.Id,
+                        Name = SelectedProduct.Name,
+                        Description = SelectedProduct.Description,
+                        ReplacementCost = SelectedProduct.ReplacementCost,
+                        PhotoPath = SelectedProduct.PhotoPath,
+                        AssetNumber = AssetNumbers
+                    };
+
+                    // Copy accessories
+                    trackedProduct.CopyAccessoriesFrom(SelectedProduct.Accessories);
+
+                    var index = Products.IndexOf(SelectedProduct);
+                    Products[index] = trackedProduct;
+                    SelectedProduct = trackedProduct;
+                }
+                else if (IsInventoryProduct && !(SelectedProduct is InventoryProduct))
+                {
+                    System.Diagnostics.Debug.WriteLine("Converting to InventoryProduct");
+                    // Convert to InventoryProduct
+                    var inventoryProduct = new InventoryProduct
+                    {
+                        Id = SelectedProduct.Id,
+                        Name = SelectedProduct.Name,
+                        Description = SelectedProduct.Description,
+                        ReplacementCost = SelectedProduct.ReplacementCost,
+                        PhotoPath = SelectedProduct.PhotoPath,
+                        QuantityTotal = InventoryQuantity,
+                        QuantityAvailable = InventoryQuantity
+                    };
+
+                    // Copy accessories
+                    inventoryProduct.CopyAccessoriesFrom(SelectedProduct.Accessories);
+
+                    var index = Products.IndexOf(SelectedProduct);
+                    Products[index] = inventoryProduct;
+                    SelectedProduct = inventoryProduct;
                 }
                 else
                 {
-                    // Create new product
-                    if (IsTrackedProduct)
+                    System.Diagnostics.Debug.WriteLine("Updating existing product");
+                    // Update existing product
+                    if (SelectedProduct is TrackedProduct tracked)
                     {
-                        product = new TrackedProduct();
+                        tracked.AssetNumber = AssetNumbers;
                     }
-                    else
+                    else if (SelectedProduct is InventoryProduct inventory)
                     {
-                        product = new InventoryProduct();
+                        inventory.QuantityTotal = InventoryQuantity;
+                        inventory.QuantityAvailable = InventoryQuantity;
                     }
-                    Products.Add(product);
                 }
 
-                // Update common properties
-                product.Name = ProductName.Trim();
-                product.Description = ProductDescription.Trim();
-                product.ReplacementCost = ReplacementCost;
-                product.PhotoPath = PhotoPath.Trim();
-
-                // Initialize accessories if null
-                if (product.Accessories == null)
-                    product.Accessories = new List<Product>();
-
-                // Update type-specific properties
-                if (product is TrackedProduct trackedProduct && IsTrackedProduct)
-                {
-                    trackedProduct.AssetNumber = AssetNumbers.Trim();
-                }
-                else if (product is InventoryProduct inventoryProduct && !IsTrackedProduct)
-                {
-                    inventoryProduct.QuantityTotal = QuantityTotal;
-                    inventoryProduct.QuantityAvailable = QuantityTotal; // Initially all available
-                }
-
-                // Save to file
+                // Save all products
                 await _dataService.SaveProductsAsync(Products.ToList());
 
-                if (!IsEditMode)
-                {
-                    SelectedProduct = product;
-                }
-
-                MessageBox.Show($"Product '{product.Name}' saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                // Refresh the display
-                OnPropertyChanged(nameof(Products));
+                MessageBox.Show("Product saved successfully!", "Success",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error saving product: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Diagnostics.Debug.WriteLine($"Error saving product: {ex.Message}");
+                MessageBox.Show($"Error saving product: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        private bool CanSaveProduct()
-        {
-            return !string.IsNullOrWhiteSpace(ProductName) && ReplacementCost >= 0;
         }
 
         private async void DeleteProduct()
@@ -254,95 +294,106 @@ namespace Pack_Track.ViewModels
                 {
                     Products.Remove(SelectedProduct);
                     await _dataService.SaveProductsAsync(Products.ToList());
-                    ClearForm();
-                    MessageBox.Show("Product deleted successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    SelectedProduct = null;
+
+                    MessageBox.Show("Product deleted successfully!", "Success",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Error deleting product: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"Error deleting product: {ex.Message}", "Error",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
 
-        private void CancelEdit()
+        private void BrowsePhoto()
         {
-            if (IsEditMode)
-            {
-                LoadProductForEdit(); // Reload original values
-            }
-            else
-            {
-                ClearForm();
-            }
-        }
+            if (SelectedProduct == null) return;
 
-        private void SelectPhoto()
-        {
             var dialog = new OpenFileDialog
             {
-                Filter = "Image files (*.jpg;*.jpeg;*.png;*.bmp;*.gif)|*.jpg;*.jpeg;*.png;*.bmp;*.gif|All files (*.*)|*.*",
+                Filter = "Image files (*.jpg, *.jpeg, *.png, *.bmp)|*.jpg;*.jpeg;*.png;*.bmp|All files (*.*)|*.*",
                 Title = "Select Product Photo"
             };
 
             if (dialog.ShowDialog() == true)
             {
-                try
-                {
-                    // Test if the image can be loaded
-                    var bitmap = new System.Windows.Media.Imaging.BitmapImage(new Uri(dialog.FileName));
-                    PhotoPath = dialog.FileName;
-                    OnPropertyChanged(nameof(PhotoPath)); // Force UI update
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Unable to load image: {ex.Message}", "Invalid Image", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
+                SelectedProduct.PhotoPath = dialog.FileName;
             }
         }
 
-        private void AddAssetNumbers()
-        {
-            var dialog = new AssetNumberDialog();
-            if (dialog.ShowDialog() == true)
-            {
-                AssetNumbers = dialog.AssetNumbers;
-            }
-        }
-
-        private void ManageAccessories()
+        private void AddAccessory()
         {
             if (SelectedProduct == null) return;
 
-            var dialog = new Views.AccessoryManagementDialog(SelectedProduct, Products.ToList());
-            if (dialog.ShowDialog() == true)
+            // Create a simple input dialog
+            var inputDialog = new Window
             {
-                // Refresh the current product display
-                OnPropertyChanged(nameof(SelectedProduct));
+                Title = "Add Accessory",
+                Width = 300,
+                Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Application.Current.MainWindow
+            };
+
+            var stackPanel = new StackPanel { Margin = new Thickness(10) };
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Enter accessory name:",
+                Margin = new Thickness(0, 0, 0, 10)
+            });
+
+            var textBox = new TextBox { Margin = new Thickness(0, 0, 0, 10) };
+            stackPanel.Children.Add(textBox);
+
+            var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+
+            var okButton = new Button
+            {
+                Content = "OK",
+                Width = 75,
+                Margin = new Thickness(0, 0, 10, 0),
+                IsDefault = true
+            };
+            okButton.Click += (s, e) => { inputDialog.DialogResult = true; inputDialog.Close(); };
+
+            var cancelButton = new Button
+            {
+                Content = "Cancel",
+                Width = 75,
+                IsCancel = true
+            };
+            cancelButton.Click += (s, e) => { inputDialog.DialogResult = false; inputDialog.Close(); };
+
+            buttonPanel.Children.Add(okButton);
+            buttonPanel.Children.Add(cancelButton);
+            stackPanel.Children.Add(buttonPanel);
+
+            inputDialog.Content = stackPanel;
+            textBox.Focus();
+
+            if (inputDialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                // Create a concrete Product instance (not abstract)
+                var accessory = new TrackedProduct
+                {
+                    Name = textBox.Text,
+                    Description = "Accessory",
+                    ReplacementCost = 0.00m,
+                    AssetNumber = "ACC1"
+                };
+
+                SelectedProduct.Accessories.Add(accessory);
             }
         }
 
-        private void ImportProducts()
+        private void RemoveAccessory(Product? accessory)
         {
-            MessageBox.Show("Import functionality will be implemented in a future version.", "Coming Soon", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
+            if (SelectedProduct == null || accessory == null) return;
 
-        private void ExportProducts()
-        {
-            MessageBox.Show("Export functionality will be implemented in a future version.", "Coming Soon", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private void ClearForm()
-        {
-            ProductName = string.Empty;
-            ProductDescription = string.Empty;
-            ReplacementCost = 0;
-            PhotoPath = string.Empty;
-            IsTrackedProduct = true;
-            AssetNumbers = string.Empty;
-            QuantityTotal = 0;
-            SelectedProduct = null;
-            IsEditMode = false;
-            OnPropertyChanged(nameof(SaveButtonText));
+            SelectedProduct.Accessories.Remove(accessory);
         }
     }
 }

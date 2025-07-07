@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿// Views/ProductManagementWindow.xaml.cs - Fixed Constructor
+using System.Windows;
 using Pack_Track.ViewModels;
 using Pack_Track.Services;
 
@@ -10,15 +11,10 @@ namespace Pack_Track.Views
         {
             InitializeComponent();
 
-            // Initialize with ViewModel
+            // Initialize the ViewModel with DataService
             var dataService = new JsonDataService();
             var viewModel = new ProductManagementViewModel(dataService);
             DataContext = viewModel;
-        }
-
-        private void CloseButton_Click(object sender, RoutedEventArgs e)
-        {
-            Close();
         }
     }
 }

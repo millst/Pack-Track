@@ -1,4 +1,4 @@
-﻿// Converters/ValueConverters.cs - Create this in a new "Converters" folder
+﻿// Converters/ValueConverters.cs - Fixed version
 using System;
 using System.Globalization;
 using System.Windows;
@@ -32,7 +32,7 @@ namespace Pack_Track.Converters
             return value switch
             {
                 TrackedProduct tracked => string.IsNullOrEmpty(tracked.AssetNumber) ? "No Assets" : $"{tracked.AssetNumber.Split(',').Length} Assets",
-                InventoryProduct inventory => $"Qty: {inventory.QuantityTotal}",
+                InventoryProduct inventory => $"Qty: {inventory.QuantityTotal}/{inventory.QuantityAvailable} Available",
                 _ => ""
             };
         }
@@ -62,7 +62,7 @@ namespace Pack_Track.Converters
         {
             bool isVisible = value is bool boolValue && boolValue;
 
-            if (parameter?.ToString() == "Invert")
+            if (parameter?.ToString() == "Inverse" || parameter?.ToString() == "Invert")
                 isVisible = !isVisible;
 
             return isVisible ? Visibility.Visible : Visibility.Collapsed;
@@ -80,7 +80,7 @@ namespace Pack_Track.Converters
         {
             bool hasValue = !string.IsNullOrEmpty(value?.ToString());
 
-            if (parameter?.ToString() == "Invert")
+            if (parameter?.ToString() == "Inverse" || parameter?.ToString() == "Invert")
                 hasValue = !hasValue;
 
             return hasValue ? Visibility.Visible : Visibility.Collapsed;
@@ -96,11 +96,52 @@ namespace Pack_Track.Converters
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is int count)
+            if (value == null) return Visibility.Collapsed;
+
+            // Handle different input types
+            int count = 0;
+
+            if (value is int intValue)
             {
-                return count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                count = intValue;
             }
-            return Visibility.Collapsed;
+            else if (value is string stringValue)
+            {
+                count = string.IsNullOrEmpty(stringValue) ? 0 : 1;
+            }
+            else if (value is System.Collections.ICollection collection)
+            {
+                count = collection.Count;
+            }
+            else if (int.TryParse(value.ToString(), out int parsedValue))
+            {
+                count = parsedValue;
+            }
+
+            bool isVisible = count > 0;
+
+            if (parameter?.ToString() == "Inverse" || parameter?.ToString() == "Invert")
+                isVisible = !isVisible;
+
+            return isVisible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    // Additional converter for product quantities
+    public class InventoryStatusConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is InventoryProduct inventory)
+            {
+                return $"{inventory.QuantityAvailable} of {inventory.QuantityTotal} available";
+            }
+            return string.Empty;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
