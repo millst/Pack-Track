@@ -46,7 +46,15 @@ namespace Pack_Track.ViewModels
                     System.Diagnostics.Debug.WriteLine($"SelectedProduct changed to: {value?.Name ?? "null"}");
                     OnSelectedProductChanged();
 
-                    // Let commands refresh naturally - remove the manual refresh calls
+                    // Force refresh of all related properties
+                    OnPropertyChanged(nameof(SelectedProduct));
+                    OnPropertyChanged(nameof(IsTrackedProduct));
+                    OnPropertyChanged(nameof(IsInventoryProduct));
+                    OnPropertyChanged(nameof(AssetNumbers));
+                    OnPropertyChanged(nameof(InventoryQuantity));
+
+                    // Force command reevaluation
+                    CommandManager.InvalidateRequerySuggested();
                 }
             }
         }
@@ -160,12 +168,14 @@ namespace Pack_Track.ViewModels
                 System.Diagnostics.Debug.WriteLine($"Setting up TrackedProduct. AssetNumber: {trackedProduct.AssetNumber}");
                 SelectedProductType = "Tracked Product (with asset numbers)";
                 AssetNumbers = trackedProduct.AssetNumber ?? string.Empty;
+                System.Diagnostics.Debug.WriteLine($"AssetNumbers set to: '{AssetNumbers}'");
             }
             else if (SelectedProduct is InventoryProduct inventoryProduct)
             {
                 System.Diagnostics.Debug.WriteLine($"Setting up InventoryProduct. Quantity: {inventoryProduct.QuantityTotal}");
                 SelectedProductType = "Inventory Product (quantity only)";
                 InventoryQuantity = inventoryProduct.QuantityTotal;
+                System.Diagnostics.Debug.WriteLine($"InventoryQuantity set to: {InventoryQuantity}");
             }
             else
             {
@@ -175,6 +185,9 @@ namespace Pack_Track.ViewModels
             }
 
             System.Diagnostics.Debug.WriteLine($"Form updated. SelectedProductType: {SelectedProductType}");
+
+            // Force update of UI elements that depend on SelectedProduct
+            OnPropertyChanged(nameof(SelectedProduct));
         }
 
         private void AddNewProduct()
@@ -327,65 +340,21 @@ namespace Pack_Track.ViewModels
         {
             if (SelectedProduct == null) return;
 
-            // Create a simple input dialog
-            var inputDialog = new Window
+            try
             {
-                Title = "Add Accessory",
-                Width = 300,
-                Height = 150,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Owner = Application.Current.MainWindow
-            };
-
-            var stackPanel = new StackPanel { Margin = new Thickness(10) };
-
-            stackPanel.Children.Add(new TextBlock
-            {
-                Text = "Enter accessory name:",
-                Margin = new Thickness(0, 0, 0, 10)
-            });
-
-            var textBox = new TextBox { Margin = new Thickness(0, 0, 0, 10) };
-            stackPanel.Children.Add(textBox);
-
-            var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-
-            var okButton = new Button
-            {
-                Content = "OK",
-                Width = 75,
-                Margin = new Thickness(0, 0, 10, 0),
-                IsDefault = true
-            };
-            okButton.Click += (s, e) => { inputDialog.DialogResult = true; inputDialog.Close(); };
-
-            var cancelButton = new Button
-            {
-                Content = "Cancel",
-                Width = 75,
-                IsCancel = true
-            };
-            cancelButton.Click += (s, e) => { inputDialog.DialogResult = false; inputDialog.Close(); };
-
-            buttonPanel.Children.Add(okButton);
-            buttonPanel.Children.Add(cancelButton);
-            stackPanel.Children.Add(buttonPanel);
-
-            inputDialog.Content = stackPanel;
-            textBox.Focus();
-
-            if (inputDialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(textBox.Text))
-            {
-                // Create a concrete Product instance (not abstract)
-                var accessory = new TrackedProduct
+                var dialog = new Pack_Track.Views.AccessoryManagementDialog(SelectedProduct, Products.ToList(), _dataService);
+                dialog.Owner = Application.Current.MainWindow;
+                if (dialog.ShowDialog() == true)
                 {
-                    Name = textBox.Text,
-                    Description = "Accessory",
-                    ReplacementCost = 0.00m,
-                    AssetNumber = "ACC1"
-                };
-
-                SelectedProduct.Accessories.Add(accessory);
+                    // Reload products to ensure we have the latest data
+                    LoadProducts();
+                    // Force refresh of the product view
+                    OnPropertyChanged(nameof(SelectedProduct));
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error opening accessory management: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

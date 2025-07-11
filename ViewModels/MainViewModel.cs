@@ -1,4 +1,4 @@
-﻿// ViewModels/MainViewModel.cs - Enhanced Tracking Only
+﻿// ViewModels/MainViewModel.cs - Enhanced Tracking with Debug
 using Pack_Track.Models;
 using Pack_Track.Services;
 using System.Collections.ObjectModel;
@@ -73,6 +73,7 @@ namespace Pack_Track.ViewModels
             {
                 if (SetProperty(ref _currentShow, value))
                 {
+                    System.Diagnostics.Debug.WriteLine($"=== CurrentShow changed to: {value?.Name} ===");
                     UpdateLiveOperations();
                     UpdateSceneButtons();
                 }
@@ -122,23 +123,55 @@ namespace Pack_Track.ViewModels
 
         private async void UpdateLiveOperations()
         {
-            if (CurrentShow != null && CurrentShow.Cast.Any() && CurrentShow.Scenes.Any())
+            System.Diagnostics.Debug.WriteLine($"=== UpdateLiveOperations START ===");
+
+            if (CurrentShow == null)
+            {
+                System.Diagnostics.Debug.WriteLine("CurrentShow is null");
+                EnhancedLiveOperationsViewModel = null;
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"Show: {CurrentShow.Name}");
+            System.Diagnostics.Debug.WriteLine($"Cast count: {CurrentShow.Cast?.Count ?? 0}");
+            System.Diagnostics.Debug.WriteLine($"Scenes count: {CurrentShow.Scenes?.Count ?? 0}");
+
+            if (CurrentShow.Cast.Any() && CurrentShow.Scenes.Any())
             {
                 try
                 {
+                    System.Diagnostics.Debug.WriteLine("Loading products...");
                     var products = await _dataService.LoadProductsAsync();
+                    System.Diagnostics.Debug.WriteLine($"Loaded {products.Count} products");
+
+                    // Check for allocations
+                    var totalAllocations = CurrentShow.Scenes.Sum(s => s.Allocations?.Count ?? 0);
+                    System.Diagnostics.Debug.WriteLine($"Total allocations across all scenes: {totalAllocations}");
+
+                    if (totalAllocations == 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine("No allocations found - user needs to set up equipment allocations");
+                        StatusMessage = "No equipment allocations found. Use Setup Show > Manage Allocations to assign equipment to actors.";
+                    }
+
                     EnhancedLiveOperationsViewModel = new SceneBySceneLiveOperationsViewModel(CurrentShow, products, _dataService);
+                    System.Diagnostics.Debug.WriteLine("Enhanced live operations view model created successfully");
                 }
                 catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine($"Error loading live operations: {ex.Message}");
                     StatusMessage = $"Error loading live operations: {ex.Message}";
                     EnhancedLiveOperationsViewModel = null;
                 }
             }
             else
             {
+                System.Diagnostics.Debug.WriteLine("Show doesn't have both cast and scenes");
+                StatusMessage = "Add cast members and scenes to enable live operations";
                 EnhancedLiveOperationsViewModel = null;
             }
+
+            System.Diagnostics.Debug.WriteLine($"=== UpdateLiveOperations END ===");
         }
 
         private void UpdateSceneButtons()
@@ -227,10 +260,30 @@ namespace Pack_Track.ViewModels
 
         private void ManageProducts()
         {
-            var productWindow = new Pack_Track.Views.ProductManagementWindow();
-            productWindow.Owner = Application.Current.MainWindow;
-            productWindow.ShowDialog();
-            StatusMessage = "Product management opened";
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("=== ManageProducts START ===");
+                System.Diagnostics.Debug.WriteLine("Creating ProductManagementWindow...");
+
+                var productWindow = new Pack_Track.Views.ProductManagementWindow();
+                System.Diagnostics.Debug.WriteLine("ProductManagementWindow created successfully");
+
+                productWindow.Owner = Application.Current.MainWindow;
+                System.Diagnostics.Debug.WriteLine("Owner set to MainWindow");
+
+                System.Diagnostics.Debug.WriteLine("Calling ShowDialog...");
+                productWindow.ShowDialog();
+
+                StatusMessage = "Product management closed";
+                System.Diagnostics.Debug.WriteLine("=== ManageProducts END ===");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in ManageProducts: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+                StatusMessage = $"Error opening product management: {ex.Message}";
+                MessageBox.Show($"Error opening product management: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void SetupShow()
@@ -246,13 +299,22 @@ namespace Pack_Track.ViewModels
             setupWindow.Owner = Application.Current.MainWindow;
             setupWindow.ShowDialog();
 
-            // Refresh UI if show was changed
+            // Always refresh UI after show setup, especially if allocations changed
             if (setupWindow.ShowChanged)
             {
+                System.Diagnostics.Debug.WriteLine("Show was changed, refreshing everything...");
                 OnPropertyChanged(nameof(CurrentShow));
                 UpdateLiveOperations();
                 UpdateSceneButtons();
                 StatusMessage = "Show setup completed - data refreshed";
+            }
+            else
+            {
+                // Even if ShowChanged is false, we should refresh live operations 
+                // in case allocations were modified
+                System.Diagnostics.Debug.WriteLine("Refreshing live operations after setup...");
+                UpdateLiveOperations();
+                StatusMessage = "Show setup completed";
             }
         }
     }

@@ -109,26 +109,48 @@ namespace Pack_Track.Services
             var filePath = Path.Combine(_dataDirectory, "products.json");
             try
             {
-                if (!File.Exists(filePath)) return new List<Product>();
+                System.Diagnostics.Debug.WriteLine($"=== LoadProductsAsync START ===");
+                System.Diagnostics.Debug.WriteLine($"Data directory: {_dataDirectory}");
+                System.Diagnostics.Debug.WriteLine($"Products file path: {filePath}");
+                System.Diagnostics.Debug.WriteLine($"File exists: {File.Exists(filePath)}");
+
+                if (!File.Exists(filePath))
+                {
+                    System.Diagnostics.Debug.WriteLine("Products file does not exist, returning empty list");
+                    return new List<Product>();
+                }
 
                 var json = await File.ReadAllTextAsync(filePath);
-                if (string.IsNullOrWhiteSpace(json)) return new List<Product>();
+                System.Diagnostics.Debug.WriteLine($"File content length: {json?.Length ?? 0} characters");
+                System.Diagnostics.Debug.WriteLine($"File content preview: {json?.Take(200)}");
+
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    System.Diagnostics.Debug.WriteLine("File content is empty or whitespace, returning empty list");
+                    return new List<Product>();
+                }
 
                 var products = JsonSerializer.Deserialize<List<Product>>(json, _jsonOptions) ?? new List<Product>();
+                System.Diagnostics.Debug.WriteLine($"Deserialized {products.Count} products");
 
                 // Ensure all products have accessories lists initialized
                 foreach (var product in products)
                 {
                     if (product.Accessories == null)
+                    {
                         product.Accessories = new ObservableCollection<Product>();
+                        System.Diagnostics.Debug.WriteLine($"Initialized accessories for product: {product.Name}");
+                    }
                 }
 
+                System.Diagnostics.Debug.WriteLine($"=== LoadProductsAsync END - Returning {products.Count} products ===");
                 return products;
             }
             catch (Exception ex)
             {
                 // Log the error and return empty list - this will allow the app to continue
-                System.Diagnostics.Debug.WriteLine($"Error loading products: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"=== LoadProductsAsync ERROR: {ex.Message} ===");
+                System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
 
                 // Optionally backup the corrupted file
                 if (File.Exists(filePath))
@@ -138,6 +160,7 @@ namespace Pack_Track.Services
                     {
                         File.Copy(filePath, backupPath);
                         File.Delete(filePath); // Clear corrupted file
+                        System.Diagnostics.Debug.WriteLine($"Backed up corrupted file to: {backupPath}");
                     }
                     catch { /* Ignore backup errors */ }
                 }

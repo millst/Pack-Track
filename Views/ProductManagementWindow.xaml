@@ -1,6 +1,7 @@
 ﻿<Window x:Class="Pack_Track.Views.ProductManagementWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:converters="clr-namespace:Pack_Track.Converters"
         Title="Product Management" Height="700" Width="1200"
         WindowStartupLocation="CenterOwner">
 
@@ -259,7 +260,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="Accessories" FontWeight="Medium" 
                                                    VerticalAlignment="Center"/>
-                                        <Button Grid.Column="1" Content="Add Accessory" 
+                                        <Button Grid.Column="1" Content="Manage Accessories" 
                                                 Command="{Binding AddAccessoryCommand}" 
                                                 Style="{StaticResource ModernButtonStyle}" 
                                                 Padding="12,6"/>
@@ -309,8 +310,10 @@
                         </StackPanel>
 
                         <!-- No Product Selected Message -->
-                        <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    Visibility="{Binding SelectedProduct, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
+                        <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <StackPanel.Visibility>
+                                <Binding Path="SelectedProduct" Converter="{StaticResource BooleanToVisibilityConverter}" ConverterParameter="Inverse"/>
+                            </StackPanel.Visibility>
                             <TextBlock Text="Select a product to view details" 
                                        FontSize="16" Foreground="#757575" 
                                        HorizontalAlignment="Center"/>

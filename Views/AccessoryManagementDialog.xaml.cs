@@ -1,23 +1,27 @@
-﻿using System.Windows;
+﻿// Views/AccessoryManagementDialog.xaml.cs - Updated to pass data service
+using System.Windows;
 using Pack_Track.Models;
 using Pack_Track.ViewModels;
-using System.Collections.ObjectModel;
-using System.Windows.Input;
+using Pack_Track.Services;
 
 namespace Pack_Track.Views
 {
     public partial class AccessoryManagementDialog : Window
     {
-        public AccessoryManagementDialog(Product product, List<Product> allProducts)
+        private readonly AccessoryManagementViewModel _viewModel;
+
+        public AccessoryManagementDialog(Product product, List<Product> allProducts, IDataService dataService)
         {
             InitializeComponent();
 
-            var viewModel = new AccessoryManagementViewModel(product, allProducts);
-            DataContext = viewModel;
+            _viewModel = new AccessoryManagementViewModel(product, allProducts, dataService);
+            DataContext = _viewModel;
         }
 
         private void OkButton_Click(object sender, RoutedEventArgs e)
         {
+            // Save changes when OK is clicked
+            _viewModel.SaveCommand.Execute(null);
             DialogResult = true;
             Close();
         }

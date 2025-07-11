@@ -1,4 +1,6 @@
-﻿using Pack_Track.Models;
+﻿// ViewModels/AccessoryManagementViewModel.cs - Fixed to save changes
+using Pack_Track.Models;
+using Pack_Track.Services;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows;
@@ -8,12 +10,16 @@ namespace Pack_Track.ViewModels
     public class AccessoryManagementViewModel : BaseViewModel
     {
         private readonly Product _product;
+        private readonly IDataService _dataService;
+        private readonly List<Product> _allProducts;
         private Product? _selectedAvailableProduct;
         private Product? _selectedAccessory;
 
-        public AccessoryManagementViewModel(Product product, List<Product> allProducts)
+        public AccessoryManagementViewModel(Product product, List<Product> allProducts, IDataService dataService)
         {
             _product = product;
+            _dataService = dataService;
+            _allProducts = allProducts;
 
             // Available products (excluding the product itself and its current accessories)
             AvailableProducts = new ObservableCollection<Product>(
@@ -25,6 +31,7 @@ namespace Pack_Track.ViewModels
 
             AddAccessoryCommand = new RelayCommand(AddAccessory, () => SelectedAvailableProduct != null);
             RemoveAccessoryCommand = new RelayCommand(RemoveAccessory, () => SelectedAccessory != null);
+            SaveCommand = new RelayCommand(SaveChanges);
         }
 
         public string ProductName => _product.Name;
@@ -46,6 +53,7 @@ namespace Pack_Track.ViewModels
 
         public ICommand AddAccessoryCommand { get; }
         public ICommand RemoveAccessoryCommand { get; }
+        public ICommand SaveCommand { get; }
 
         private void AddAccessory()
         {
@@ -103,6 +111,20 @@ namespace Pack_Track.ViewModels
             catch (Exception ex)
             {
                 MessageBox.Show($"Error removing accessory: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void SaveChanges()
+        {
+            try
+            {
+                // Save all products to persist the accessory changes
+                await _dataService.SaveProductsAsync(_allProducts);
+                MessageBox.Show("Accessories saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error saving accessories: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

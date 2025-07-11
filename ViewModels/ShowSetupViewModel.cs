@@ -1,4 +1,4 @@
-﻿// ViewModels/ShowSetupViewModel.cs - Fixed version
+﻿// ViewModels/ShowSetupViewModel.cs - Fixed Add Actor Command
 using Pack_Track.Models;
 using Pack_Track.Services;
 using System.Collections.ObjectModel;
@@ -30,6 +30,7 @@ namespace Pack_Track.ViewModels
         private string _newRunName = string.Empty;
         private DateTime _newRunDate = DateTime.Today;
         private TimeSpan _newRunTime = new TimeSpan(19, 30, 0); // 7:30 PM default
+        private RunType _newRunType = RunType.Rehearsal;
 
         public ShowSetupViewModel(Show show, IDataService dataService)
         {
@@ -48,16 +49,19 @@ namespace Pack_Track.ViewModels
             // Set default scene number to next available
             UpdateNewSceneNumber();
 
-            // Commands
-            AddSceneCommand = new RelayCommand(AddScene, () => !string.IsNullOrWhiteSpace(NewSceneName));
+            // Commands - Fixed to use proper CanExecute logic and correct names
+            AddSceneCommand = new RelayCommand(AddScene, CanAddScene);
             RemoveSceneCommand = new RelayCommand(RemoveScene, () => SelectedScene != null);
-            AddCastMemberCommand = new RelayCommand(AddCastMember, () => !string.IsNullOrWhiteSpace(NewActorName));
+            AddActorCommand = new RelayCommand(AddCastMember, CanAddCastMember); // Using AddActorCommand to match XAML
+            AddCastMemberCommand = new RelayCommand(AddCastMember, CanAddCastMember); // Backup for any old references
             RemoveCastMemberCommand = new RelayCommand(RemoveCastMember, () => SelectedActor != null);
-            AddRunCommand = new RelayCommand(AddRun, () => !string.IsNullOrWhiteSpace(NewRunName));
+            AddRunCommand = new RelayCommand(AddRun, CanAddRun);
             RemoveRunCommand = new RelayCommand(RemoveRun, () => SelectedRun != null);
             ManageAllocationsCommand = new RelayCommand(ManageAllocations, () => Scenes.Any() && Cast.Any());
 
             LoadProducts();
+
+            System.Diagnostics.Debug.WriteLine($"ShowSetupViewModel initialized. Cast count: {Cast.Count}");
         }
 
         public ObservableCollection<Scene> Scenes { get; }
@@ -92,7 +96,13 @@ namespace Pack_Track.ViewModels
         public string NewSceneName
         {
             get => _newSceneName;
-            set => SetProperty(ref _newSceneName, value);
+            set
+            {
+                if (SetProperty(ref _newSceneName, value))
+                {
+                    CommandManager.InvalidateRequerySuggested(); // Refresh CanExecute
+                }
+            }
         }
 
         public int NewSceneNumber
@@ -112,13 +122,27 @@ namespace Pack_Track.ViewModels
         public string NewActorName
         {
             get => _newActorName;
-            set => SetProperty(ref _newActorName, value);
+            set
+            {
+                if (SetProperty(ref _newActorName, value))
+                {
+                    System.Diagnostics.Debug.WriteLine($"NewActorName changed to: '{value}'");
+                    CommandManager.InvalidateRequerySuggested(); // Refresh CanExecute
+                }
+            }
         }
 
         public string NewActorRole
         {
             get => _newActorRole;
-            set => SetProperty(ref _newActorRole, value);
+            set
+            {
+                if (SetProperty(ref _newActorRole, value))
+                {
+                    System.Diagnostics.Debug.WriteLine($"NewActorRole changed to: '{value}'");
+                    CommandManager.InvalidateRequerySuggested(); // Refresh CanExecute
+                }
+            }
         }
 
         public string NewActorPhone
@@ -138,7 +162,13 @@ namespace Pack_Track.ViewModels
         public string NewRunName
         {
             get => _newRunName;
-            set => SetProperty(ref _newRunName, value);
+            set
+            {
+                if (SetProperty(ref _newRunName, value))
+                {
+                    CommandManager.InvalidateRequerySuggested(); // Refresh CanExecute
+                }
+            }
         }
 
         public DateTime NewRunDate
@@ -153,6 +183,15 @@ namespace Pack_Track.ViewModels
             set => SetProperty(ref _newRunTime, value);
         }
 
+        public RunType NewRunType
+        {
+            get => _newRunType;
+            set => SetProperty(ref _newRunType, value);
+        }
+
+        // Available run types for the dropdown
+        public Array RunTypes => Enum.GetValues(typeof(RunType));
+
         private Run? _selectedRun;
         public Run? SelectedRun
         {
@@ -163,7 +202,8 @@ namespace Pack_Track.ViewModels
         // Commands
         public ICommand AddSceneCommand { get; }
         public ICommand RemoveSceneCommand { get; }
-        public ICommand AddCastMemberCommand { get; }
+        public ICommand AddActorCommand { get; } // This matches the XAML binding
+        public ICommand AddCastMemberCommand { get; } // Backup for compatibility
         public ICommand RemoveCastMemberCommand { get; }
         public ICommand AddRunCommand { get; }
         public ICommand RemoveRunCommand { get; }
@@ -174,9 +214,11 @@ namespace Pack_Track.ViewModels
             try
             {
                 _allProducts = await _dataService.LoadProductsAsync();
+                System.Diagnostics.Debug.WriteLine($"Loaded {_allProducts.Count} products for show setup");
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"Error loading products: {ex.Message}");
                 MessageBox.Show($"Error loading products: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -194,8 +236,29 @@ namespace Pack_Track.ViewModels
             }
         }
 
+        // CanExecute methods
+        private bool CanAddScene()
+        {
+            return !string.IsNullOrWhiteSpace(NewSceneName);
+        }
+
+        private bool CanAddCastMember()
+        {
+            var canAdd = !string.IsNullOrWhiteSpace(NewActorName) || !string.IsNullOrWhiteSpace(NewActorRole);
+            System.Diagnostics.Debug.WriteLine($"CanAddCastMember: {canAdd} (Name: '{NewActorName}', Role: '{NewActorRole}')");
+            return canAdd;
+        }
+
+        private bool CanAddRun()
+        {
+            return !string.IsNullOrWhiteSpace(NewRunName);
+        }
+
+        // Command implementations
         private void AddScene()
         {
+            System.Diagnostics.Debug.WriteLine($"AddScene called: {NewSceneName}");
+
             var scene = new Scene
             {
                 Name = NewSceneName,
@@ -214,6 +277,8 @@ namespace Pack_Track.ViewModels
             {
                 _show.CurrentScene = scene;
             }
+
+            System.Diagnostics.Debug.WriteLine($"Scene added successfully. Total scenes: {Scenes.Count}");
         }
 
         private void RemoveScene()
@@ -244,11 +309,21 @@ namespace Pack_Track.ViewModels
 
         private void AddCastMember()
         {
+            System.Diagnostics.Debug.WriteLine($"AddCastMember called - Name: '{NewActorName}', Role: '{NewActorRole}'");
+
+            // Require at least one field to be filled
+            if (string.IsNullOrWhiteSpace(NewActorName) && string.IsNullOrWhiteSpace(NewActorRole))
+            {
+                MessageBox.Show("Please enter either an actor name or role name.", "Missing Information",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             var actor = new Actor
             {
-                RealName = NewActorName,
-                RoleName = NewActorRole,
-                PhoneNumber = NewActorPhone
+                RealName = NewActorName?.Trim() ?? string.Empty,
+                RoleName = NewActorRole?.Trim() ?? string.Empty,
+                PhoneNumber = NewActorPhone?.Trim() ?? string.Empty
             };
 
             _show.Cast.Add(actor);
@@ -258,6 +333,8 @@ namespace Pack_Track.ViewModels
             NewActorName = string.Empty;
             NewActorRole = string.Empty;
             NewActorPhone = string.Empty;
+
+            System.Diagnostics.Debug.WriteLine($"Actor added successfully. Total cast: {Cast.Count}");
         }
 
         private void RemoveCastMember()
@@ -286,10 +363,13 @@ namespace Pack_Track.ViewModels
 
         private void AddRun()
         {
+            System.Diagnostics.Debug.WriteLine($"AddRun called: {NewRunName}");
+
             var run = new Run
             {
                 Name = NewRunName,
-                DateTime = NewRunDate.Add(NewRunTime)
+                DateTime = NewRunDate.Add(NewRunTime),
+                RunType = NewRunType
             };
 
             _show.Runs.Add(run);
@@ -307,6 +387,9 @@ namespace Pack_Track.ViewModels
             NewRunName = string.Empty;
             NewRunDate = DateTime.Today;
             NewRunTime = new TimeSpan(19, 30, 0);
+            NewRunType = RunType.Rehearsal; // Reset to default
+
+            System.Diagnostics.Debug.WriteLine($"Run added successfully. Total runs: {Runs.Count}");
         }
 
         private void RemoveRun()

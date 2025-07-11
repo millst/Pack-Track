@@ -55,17 +55,33 @@ namespace Pack_Track.Converters
             return value is bool boolValue ? !boolValue : false;
         }
     }
-
+    // Updated BooleanToVisibilityConverter with debug output
     public class BooleanToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            bool isVisible = value is bool boolValue && boolValue;
+            System.Diagnostics.Debug.WriteLine($"BooleanToVisibilityConverter - Value: {value}, Type: {value?.GetType()}, Parameter: {parameter}");
+
+            bool isVisible = false;
+
+            if (value is bool boolValue)
+            {
+                isVisible = boolValue;
+            }
+            else if (value != null)
+            {
+                isVisible = true; // Non-null object = visible
+            }
 
             if (parameter?.ToString() == "Inverse" || parameter?.ToString() == "Invert")
+            {
                 isVisible = !isVisible;
+            }
 
-            return isVisible ? Visibility.Visible : Visibility.Collapsed;
+            var result = isVisible ? Visibility.Visible : Visibility.Collapsed;
+            System.Diagnostics.Debug.WriteLine($"BooleanToVisibilityConverter - Result: {result}");
+
+            return result;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

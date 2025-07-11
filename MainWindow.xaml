@@ -1,4 +1,4 @@
-﻿<!-- MainWindow.xaml - Updated for Scene-by-Scene Layout -->
+﻿<!-- MainWindow.xaml - Updated Individual Asset Items Template -->
 <Window x:Class="Pack_Track.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -119,8 +119,8 @@
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="16"/>
             <Setter Property="Margin" Value="8"/>
-            <Setter Property="MinWidth" Value="180"/>
-            <Setter Property="MaxWidth" Value="200"/>
+            <Setter Property="MinWidth" Value="200"/>
+            <Setter Property="MaxWidth" Value="250"/>
         </Style>
     </Window.Resources>
 
@@ -305,7 +305,7 @@
                                                                    FontWeight="Medium" HorizontalAlignment="Center" FontSize="12"/>
                                                     </Border>
 
-                                                    <!-- Individual Asset Items -->
+                                                    <!-- Individual Asset Items with Simple Status Buttons -->
                                                     <ItemsControl ItemsSource="{Binding AssetItems}" Margin="0,4,0,0">
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate>
@@ -316,18 +316,43 @@
                                                                                    Margin="0,0,0,4"/>
                                                                         <Button Content="{Binding ActionButtonText}" 
                                                                                 Command="{Binding ToggleStatusCommand}"
-                                                                                Background="{Binding StatusColor}" 
+                                                                                Background="{Binding SimpleStatusColor}" 
                                                                                 Foreground="White"
                                                                                 BorderThickness="0" 
                                                                                 Padding="8,6" FontSize="12" FontWeight="Medium"
                                                                                 Tag="{Binding}"
                                                                                 PreviewMouseLeftButtonDown="Button_PreviewMouseLeftButtonDown"
-                                                                                PreviewMouseLeftButtonUp="Button_PreviewMouseLeftButtonUp">
+                                                                                PreviewMouseLeftButtonUp="Button_PreviewMouseLeftButtonUp"
+                                                                                MouseLeave="Button_MouseLeave"
+                                                                                HorizontalAlignment="Stretch">
                                                                             <Button.Template>
                                                                                 <ControlTemplate TargetType="Button">
-                                                                                    <Border Background="{TemplateBinding Background}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                                                                                    <Border Background="{TemplateBinding Background}" 
+                                                                                            CornerRadius="3" 
+                                                                                            Padding="{TemplateBinding Padding}"
+                                                                                            BorderBrush="White" 
+                                                                                            BorderThickness="1">
                                                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                                        <Border.Effect>
+                                                                                            <DropShadowEffect Color="#000000" Opacity="0.2" BlurRadius="3" ShadowDepth="1"/>
+                                                                                        </Border.Effect>
                                                                                     </Border>
+                                                                                    <ControlTemplate.Triggers>
+                                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                                            <Setter Property="Effect">
+                                                                                                <Setter.Value>
+                                                                                                    <DropShadowEffect Color="#000000" Opacity="0.4" BlurRadius="5" ShadowDepth="2"/>
+                                                                                                </Setter.Value>
+                                                                                            </Setter>
+                                                                                        </Trigger>
+                                                                                        <Trigger Property="IsPressed" Value="True">
+                                                                                            <Setter Property="RenderTransform">
+                                                                                                <Setter.Value>
+                                                                                                    <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                                                                </Setter.Value>
+                                                                                            </Setter>
+                                                                                        </Trigger>
+                                                                                    </ControlTemplate.Triggers>
                                                                                 </ControlTemplate>
                                                                             </Button.Template>
                                                                         </Button>

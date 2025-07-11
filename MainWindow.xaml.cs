@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿// MainWindow.xaml.cs - Fixed hold timer functionality
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -19,6 +20,7 @@ namespace Pack_Track
         private DispatcherTimer? _holdTimer;
         private int _holdStage = 0;
         private AssetItemViewModel? _currentHoldItem;
+        private Button? _currentHoldButton;
 
         public MainWindow()
         {
@@ -44,79 +46,180 @@ namespace Pack_Track
 
         private void Button_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (sender is Button button && button.Tag is AssetItemViewModel assetItem)
+            try
             {
-                // Only start hold timer for checked out items (when showing "Check In")
-                if (assetItem.Status != EquipmentStatus.CheckedOut) return;
+                if (sender is Button button && button.Tag is AssetItemViewModel assetItem)
+                {
+                    // Only start hold timer for checked out items (when showing "Check In")
+                    if (assetItem.Status != EquipmentStatus.CheckedOut) return;
 
-                _currentHoldItem = assetItem;
-                _holdStage = 0;
-                _holdTimer = new DispatcherTimer();
-                _holdTimer.Interval = TimeSpan.FromSeconds(3);
-                _holdTimer.Tick += HoldTimer_Tick;
-                _holdTimer.Start();
+                    _currentHoldItem = assetItem;
+                    _currentHoldButton = button;
+                    _holdStage = 0;
+                    _holdTimer = new DispatcherTimer();
+                    _holdTimer.Interval = TimeSpan.FromSeconds(3);
+                    _holdTimer.Tick += HoldTimer_Tick;
+                    _holdTimer.Start();
+
+                    // Visual feedback - change button color to indicate hold is active
+                    button.Background = new SolidColorBrush(Color.FromRgb(255, 193, 7)); // Warning yellow
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in Button_PreviewMouseLeftButtonDown: {ex.Message}");
+                StopHoldTimer();
             }
         }
 
         private void Button_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            StopHoldTimer();
+            try
+            {
+                StopHoldTimer();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in Button_PreviewMouseLeftButtonUp: {ex.Message}");
+            }
+        }
+
+        private void Button_MouseLeave(object sender, MouseEventArgs e)
+        {
+            try
+            {
+                // Stop hold timer if mouse leaves the button
+                StopHoldTimer();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in Button_MouseLeave: {ex.Message}");
+            }
         }
 
         private void StopHoldTimer()
         {
-            if (_holdTimer != null)
+            try
             {
-                _holdTimer.Stop();
+                if (_holdTimer != null)
+                {
+                    _holdTimer.Stop();
+                    _holdTimer = null;
+                }
+
+                _holdStage = 0;
+
+                // Reset button color safely
+                if (_currentHoldButton != null && _currentHoldItem != null)
+                {
+                    try
+                    {
+                        var colorBrush = new SolidColorBrush();
+                        switch (_currentHoldItem.Status)
+                        {
+                            case EquipmentStatus.CheckedOut:
+                                colorBrush.Color = Color.FromRgb(255, 152, 0); // Orange
+                                break;
+                            case EquipmentStatus.CheckedIn:
+                                colorBrush.Color = Color.FromRgb(76, 175, 80); // Green
+                                break;
+                            case EquipmentStatus.Missing:
+                                colorBrush.Color = Color.FromRgb(244, 67, 54); // Red
+                                break;
+                            case EquipmentStatus.Damaged:
+                                colorBrush.Color = Color.FromRgb(233, 30, 99); // Pink
+                                break;
+                            default:
+                                colorBrush.Color = Color.FromRgb(158, 158, 158); // Gray
+                                break;
+                        }
+                        _currentHoldButton.Background = colorBrush;
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error resetting button color: {ex.Message}");
+                    }
+                }
+
+                _currentHoldItem = null;
+                _currentHoldButton = null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in StopHoldTimer: {ex.Message}");
+                // Force clear everything
                 _holdTimer = null;
                 _holdStage = 0;
                 _currentHoldItem = null;
+                _currentHoldButton = null;
             }
         }
 
         private void HoldTimer_Tick(object? sender, EventArgs e)
         {
-            if (_currentHoldItem == null) return;
+            if (_currentHoldItem == null || _currentHoldButton == null)
+            {
+                StopHoldTimer();
+                return;
+            }
 
             _holdStage++;
 
             switch (_holdStage)
             {
                 case 1: // First 3 seconds - mark as damaged
-                    MarkAsDamaged(_currentHoldItem);
-                    _holdTimer?.Stop();
-                    // Start timer for lost
-                    _holdTimer = new DispatcherTimer();
-                    _holdTimer.Interval = TimeSpan.FromSeconds(3);
-                    _holdTimer.Tick += HoldTimer_Tick;
-                    _holdTimer.Start();
+                    try
+                    {
+                        MarkAsDamaged(_currentHoldItem);
+                        if (_currentHoldButton != null)
+                        {
+                            _currentHoldButton.Background = new SolidColorBrush(Color.FromRgb(233, 30, 99)); // Pink for damaged
+                        }
+                        _holdTimer?.Stop();
+                        // Start timer for lost
+                        _holdTimer = new DispatcherTimer();
+                        _holdTimer.Interval = TimeSpan.FromSeconds(3);
+                        _holdTimer.Tick += HoldTimer_Tick;
+                        _holdTimer.Start();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error in HoldTimer stage 1: {ex.Message}");
+                        StopHoldTimer();
+                    }
                     break;
 
                 case 2: // Second 3 seconds - mark as lost
-                    MarkAsLost(_currentHoldItem);
-                    StopHoldTimer();
+                    try
+                    {
+                        MarkAsLost(_currentHoldItem);
+                        if (_currentHoldButton != null)
+                        {
+                            _currentHoldButton.Background = new SolidColorBrush(Color.FromRgb(244, 67, 54)); // Red for lost
+                        }
+                        StopHoldTimer();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error in HoldTimer stage 2: {ex.Message}");
+                        StopHoldTimer();
+                    }
                     break;
             }
         }
 
         private void MarkAsDamaged(AssetItemViewModel assetItem)
         {
-            if (assetItem._allocation?.AssetStatus != null)
-            {
-                assetItem._allocation.AssetStatus.Status = EquipmentStatus.Damaged;
-                MessageBox.Show($"{assetItem.ProductName} marked as DAMAGED", "Equipment Status Changed",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
+            assetItem.MarkAsDamaged();
+            MessageBox.Show($"{assetItem.ProductName} marked as DAMAGED", "Equipment Status Changed",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
         private void MarkAsLost(AssetItemViewModel assetItem)
         {
-            if (assetItem._allocation?.AssetStatus != null)
-            {
-                assetItem._allocation.AssetStatus.Status = EquipmentStatus.Missing;
-                MessageBox.Show($"{assetItem.ProductName} marked as LOST/MISSING", "Equipment Status Changed",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            assetItem.MarkAsLost();
+            MessageBox.Show($"{assetItem.ProductName} marked as LOST/MISSING", "Equipment Status Changed",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
         private void ScrollToScene(Scene? targetScene)
