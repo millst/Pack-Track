@@ -1,6 +1,8 @@
-﻿// Enhanced Models for Asset-Level Equipment Tracking
+﻿// Enhanced Models for Asset-Level Equipment Tracking with Shared Status
+using Pack_Track.Models;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Transactions;
 
 namespace Pack_Track.Models
 {
@@ -149,6 +151,130 @@ namespace Pack_Track.Models
     {
         public List<AssetStatus> AssetStatuses { get; set; } = new List<AssetStatus>();
         public List<EquipmentTransaction> Transactions { get; set; } = new List<EquipmentTransaction>();
+        public List<SceneTransition> SceneTransitions { get; set; } = new List<SceneTransition>();
+
+        // Helper method to generate transitions based on scene allocations
+        public void GenerateSceneTransitions(List<Product> allProducts)
+        {
+            SceneTransitions.Clear();
+
+            var orderedScenes = Scenes.OrderBy(s => s.SceneNumber).ToList();
+
+            for (int i = 0; i < orderedScenes.Count - 1; i++)
+            {
+                var currentScene = orderedScenes[i];
+                var nextScene = orderedScenes[i + 1];
+
+                var transition = GenerateTransitionBetweenScenes(currentScene, nextScene, allProducts);
+                if (transition.Actions.Any())
+                {
+                    SceneTransitions.Add(transition);
+                }
+            }
+        }
+
+        private SceneTransition GenerateTransitionBetweenScenes(Scene fromScene, Scene toScene, List<Product> allProducts)
+        {
+            var transition = new SceneTransition
+            {
+                FromSceneNumber = fromScene.SceneNumber,
+                ToSceneNumber = toScene.SceneNumber
+            };
+
+            // Get allocations for both scenes
+            var fromAllocations = fromScene.Allocations.ToList();
+            var toAllocations = toScene.Allocations.ToList();
+
+            // Find equipment that needs to be moved
+            foreach (var fromAllocation in fromAllocations)
+            {
+                var product = allProducts.FirstOrDefault(p => p.Id == fromAllocation.ProductId);
+                if (product == null) continue;
+
+                // Check if this exact asset (product + asset number) appears in the next scene
+                var matchingToAllocation = toAllocations.FirstOrDefault(a =>
+                    a.ProductId == fromAllocation.ProductId &&
+                    a.AssetInfo == fromAllocation.AssetInfo);
+
+                if (matchingToAllocation != null)
+                {
+                    // Asset moves from one actor to another (or stays with same actor)
+                    if (matchingToAllocation.ActorId != fromAllocation.ActorId)
+                    {
+                        var fromActor = Cast.FirstOrDefault(a => a.Id == fromAllocation.ActorId);
+                        var toActor = Cast.FirstOrDefault(a => a.Id == matchingToAllocation.ActorId);
+
+                        if (fromActor != null && toActor != null)
+                        {
+                            transition.Actions.Add(new TransitionAction
+                            {
+                                Type = TransitionType.Transfer,
+                                ProductId = fromAllocation.ProductId,
+                                AssetNumber = fromAllocation.AssetInfo ?? "",
+                                FromActorId = fromAllocation.ActorId,
+                                ToActorId = matchingToAllocation.ActorId,
+                                Product = product,
+                                FromActor = fromActor,
+                                ToActor = toActor
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    // Asset is no longer needed - should be checked in
+                    var fromActor = Cast.FirstOrDefault(a => a.Id == fromAllocation.ActorId);
+                    if (fromActor != null)
+                    {
+                        transition.Actions.Add(new TransitionAction
+                        {
+                            Type = TransitionType.CheckIn,
+                            ProductId = fromAllocation.ProductId,
+                            AssetNumber = fromAllocation.AssetInfo ?? "",
+                            FromActorId = fromAllocation.ActorId,
+                            ToActorId = Guid.Empty,
+                            Product = product,
+                            FromActor = fromActor,
+                            ToActor = null
+                        });
+                    }
+                }
+            }
+
+            // Find new equipment that needs to be checked out for the next scene
+            foreach (var toAllocation in toAllocations)
+            {
+                var product = allProducts.FirstOrDefault(p => p.Id == toAllocation.ProductId);
+                if (product == null) continue;
+
+                // Check if this asset was not in the previous scene
+                var wasInPreviousScene = fromAllocations.Any(a =>
+                    a.ProductId == toAllocation.ProductId &&
+                    a.AssetInfo == toAllocation.AssetInfo);
+
+                if (!wasInPreviousScene)
+                {
+                    // New equipment needs to be checked out
+                    var toActor = Cast.FirstOrDefault(a => a.Id == toAllocation.ActorId);
+                    if (toActor != null)
+                    {
+                        transition.Actions.Add(new TransitionAction
+                        {
+                            Type = TransitionType.CheckOut,
+                            ProductId = toAllocation.ProductId,
+                            AssetNumber = toAllocation.AssetInfo ?? "",
+                            FromActorId = Guid.Empty,
+                            ToActorId = toAllocation.ActorId,
+                            Product = product,
+                            FromActor = null,
+                            ToActor = toActor
+                        });
+                    }
+                }
+            }
+
+            return transition;
+        }
 
         // Helper method to get current allocations for a scene with asset status
         public List<AllocationWithAssets> GetAllocationsWithAssets(Guid sceneId, List<Product> allProducts)
@@ -299,6 +425,53 @@ namespace Pack_Track.Models
             });
 
             return true;
+        }
+    }
+}
+d, Guid toActorId, Guid sceneId)
+        {
+            var assetStatus = AssetStatuses.FirstOrDefault(a => a.Id == assetStatusId);
+if (assetStatus == null || assetStatus.CurrentlyAssignedToActorId != fromActorId) return false;
+
+// Update asset status
+assetStatus.CurrentlyAssignedToActorId = toActorId;
+assetStatus.CurrentSceneId = sceneId;
+
+// Record transaction
+Transactions.Add(new EquipmentTransaction
+{
+    AssetStatusId = assetStatusId,
+    FromActorId = fromActorId,
+    ToActorId = toActorId,
+    SceneId = sceneId,
+    FromStatus = EquipmentStatus.CheckedOut,
+    ToStatus = EquipmentStatus.CheckedOut,
+    Type = TransactionType.Transfer
+});
+
+return true;
+        }d, Guid toActorId, Guid sceneId)
+        {
+            var assetStatus = AssetStatuses.FirstOrDefault(a => a.Id == assetStatusId);
+if (assetStatus == null || assetStatus.CurrentlyAssignedToActorId != fromActorId) return false;
+
+// Update asset status
+assetStatus.CurrentlyAssignedToActorId = toActorId;
+assetStatus.CurrentSceneId = sceneId;
+
+// Record transaction
+Transactions.Add(new EquipmentTransaction
+{
+    AssetStatusId = assetStatusId,
+    FromActorId = fromActorId,
+    ToActorId = toActorId,
+    SceneId = sceneId,
+    FromStatus = EquipmentStatus.CheckedOut,
+    ToStatus = EquipmentStatus.CheckedOut,
+    Type = TransactionType.Transfer
+});
+
+return true;
         }
     }
 }

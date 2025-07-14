@@ -1,4 +1,4 @@
-﻿<!-- MainWindow.xaml - Updated Individual Asset Items Template -->
+﻿<!-- MainWindow.xaml - Fixed version without scene transitions for now -->
 <Window x:Class="Pack_Track.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -112,15 +112,16 @@
             <Setter Property="Margin" Value="0,0,0,8"/>
         </Style>
 
-        <!-- Equipment Card Style -->
+        <!-- Simplified Equipment Card Style - No status colors -->
         <Style x:Key="EquipmentCardStyle" TargetType="Border">
             <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="BorderBrush" Value="#E0E0E0"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="16"/>
             <Setter Property="Margin" Value="8"/>
-            <Setter Property="MinWidth" Value="200"/>
-            <Setter Property="MaxWidth" Value="250"/>
+            <Setter Property="MinWidth" Value="220"/>
+            <Setter Property="MaxWidth" Value="280"/>
         </Style>
     </Window.Resources>
 
@@ -237,7 +238,7 @@
             </Grid>
         </Border>
 
-        <!-- Main Content Area - Scene by Scene -->
+        <!-- Main Content Area - Scene by Scene with Equipment -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="MainScrollViewer">
             <ItemsControl ItemsSource="{Binding EnhancedLiveOperationsViewModel.SceneOperations}">
                 <ItemsControl.ItemTemplate>
@@ -263,20 +264,6 @@
                                     </StackPanel>
 
                                     <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                        <Border Background="#FFF3E0" CornerRadius="4" Padding="8,4" Margin="4,0">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding SceneCheckedOutCount, Mode=OneWay}" 
-                                                           FontWeight="Bold" Foreground="#FF9800" VerticalAlignment="Center"/>
-                                                <TextBlock Text=" Out" FontSize="10" VerticalAlignment="Center" Margin="2,0,0,0"/>
-                                            </StackPanel>
-                                        </Border>
-                                        <Border Background="#E8F5E8" CornerRadius="4" Padding="8,4" Margin="4,0">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding SceneCheckedInCount, Mode=OneWay}" 
-                                                           FontWeight="Bold" Foreground="#4CAF50" VerticalAlignment="Center"/>
-                                                <TextBlock Text=" In" FontSize="10" VerticalAlignment="Center" Margin="2,0,0,0"/>
-                                            </StackPanel>
-                                        </Border>
                                         <Button Content="All Out" Command="{Binding CheckOutAllSceneCommand}" 
                                                 Style="{StaticResource SceneButtonStyle}" Background="#FF9800" Margin="8,0,4,0"/>
                                         <Button Content="All In" Command="{Binding CheckInAllSceneCommand}" 
@@ -293,64 +280,70 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Style="{StaticResource EquipmentCardStyle}"
-                                                    BorderBrush="{Binding StatusColor}">
+                                            <Border Style="{StaticResource EquipmentCardStyle}">
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding Actor.DisplayName}" FontWeight="Bold" 
-                                                               FontSize="16" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                                               FontSize="16" Margin="0,0,0,12" TextWrapping="Wrap" 
+                                                               HorizontalAlignment="Center"/>
 
-                                                    <Border Background="{Binding StatusColor}" CornerRadius="4" 
-                                                            Padding="8,4" Margin="0,0,0,8">
-                                                        <TextBlock Text="{Binding StatusText}" Foreground="White" 
-                                                                   FontWeight="Medium" HorizontalAlignment="Center" FontSize="12"/>
-                                                    </Border>
-
-                                                    <!-- Individual Asset Items with Simple Status Buttons -->
                                                     <ItemsControl ItemsSource="{Binding AssetItems}" Margin="0,4,0,0">
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate>
-                                                                <Border Background="#F8F8F8" Padding="8,6" Margin="0,2" CornerRadius="4">
+                                                                <Border Background="#F8F8F8" Padding="12,8" Margin="0,3" CornerRadius="6">
                                                                     <StackPanel>
                                                                         <TextBlock Text="{Binding ProductName}" 
-                                                                                   FontSize="12" FontWeight="Medium" TextWrapping="Wrap" 
-                                                                                   Margin="0,0,0,4"/>
-                                                                        <Button Content="{Binding ActionButtonText}" 
+                                                                                   FontSize="13" FontWeight="Medium" TextWrapping="Wrap" 
+                                                                                   Margin="0,0,0,8" HorizontalAlignment="Center"/>
+
+                                                                        <Button Content="{Binding ButtonText}" 
                                                                                 Command="{Binding ToggleStatusCommand}"
-                                                                                Background="{Binding SimpleStatusColor}" 
+                                                                                Background="{Binding ButtonColor}" 
                                                                                 Foreground="White"
                                                                                 BorderThickness="0" 
-                                                                                Padding="8,6" FontSize="12" FontWeight="Medium"
+                                                                                Padding="12,8" 
+                                                                                FontSize="11" 
+                                                                                FontWeight="Medium"
                                                                                 Tag="{Binding}"
                                                                                 PreviewMouseLeftButtonDown="Button_PreviewMouseLeftButtonDown"
                                                                                 PreviewMouseLeftButtonUp="Button_PreviewMouseLeftButtonUp"
                                                                                 MouseLeave="Button_MouseLeave"
-                                                                                HorizontalAlignment="Stretch">
+                                                                                HorizontalAlignment="Stretch"
+                                                                                IsEnabled="{Binding CanInteract}">
                                                                             <Button.Template>
                                                                                 <ControlTemplate TargetType="Button">
                                                                                     <Border Background="{TemplateBinding Background}" 
-                                                                                            CornerRadius="3" 
+                                                                                            CornerRadius="4" 
                                                                                             Padding="{TemplateBinding Padding}"
                                                                                             BorderBrush="White" 
                                                                                             BorderThickness="1">
                                                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                                                         <Border.Effect>
-                                                                                            <DropShadowEffect Color="#000000" Opacity="0.2" BlurRadius="3" ShadowDepth="1"/>
+                                                                                            <DropShadowEffect Color="#000000" Opacity="0.15" BlurRadius="4" ShadowDepth="1"/>
                                                                                         </Border.Effect>
                                                                                     </Border>
                                                                                     <ControlTemplate.Triggers>
                                                                                         <Trigger Property="IsMouseOver" Value="True">
                                                                                             <Setter Property="Effect">
                                                                                                 <Setter.Value>
-                                                                                                    <DropShadowEffect Color="#000000" Opacity="0.4" BlurRadius="5" ShadowDepth="2"/>
+                                                                                                    <DropShadowEffect Color="#000000" Opacity="0.3" BlurRadius="6" ShadowDepth="2"/>
+                                                                                                </Setter.Value>
+                                                                                            </Setter>
+                                                                                            <Setter Property="RenderTransform">
+                                                                                                <Setter.Value>
+                                                                                                    <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
                                                                                                 </Setter.Value>
                                                                                             </Setter>
                                                                                         </Trigger>
                                                                                         <Trigger Property="IsPressed" Value="True">
                                                                                             <Setter Property="RenderTransform">
                                                                                                 <Setter.Value>
-                                                                                                    <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                                                                    <ScaleTransform ScaleX="0.96" ScaleY="0.96"/>
                                                                                                 </Setter.Value>
                                                                                             </Setter>
+                                                                                        </Trigger>
+                                                                                        <Trigger Property="IsEnabled" Value="False">
+                                                                                            <Setter Property="Background" Value="#CCCCCC"/>
+                                                                                            <Setter Property="Foreground" Value="#666666"/>
                                                                                         </Trigger>
                                                                                     </ControlTemplate.Triggers>
                                                                                 </ControlTemplate>

@@ -1,4 +1,4 @@
-﻿// MainWindow.xaml.cs - Fixed hold timer functionality
+﻿// MainWindow.xaml.cs - Clean version with scene transitions
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -51,7 +51,7 @@ namespace Pack_Track
                 if (sender is Button button && button.Tag is AssetItemViewModel assetItem)
                 {
                     // Only start hold timer for checked out items (when showing "Check In")
-                    if (assetItem.Status != EquipmentStatus.CheckedOut) return;
+                    if (assetItem.Status != EquipmentStatus.CheckedOut || !assetItem.IsAssignedToThisActor) return;
 
                     _currentHoldItem = assetItem;
                     _currentHoldButton = button;
@@ -114,25 +114,20 @@ namespace Pack_Track
                 {
                     try
                     {
+                        // Reset to the correct button color
                         var colorBrush = new SolidColorBrush();
-                        switch (_currentHoldItem.Status)
+                        var color = _currentHoldItem.ButtonColor;
+
+                        // Parse the hex color
+                        if (color.StartsWith("#"))
                         {
-                            case EquipmentStatus.CheckedOut:
-                                colorBrush.Color = Color.FromRgb(255, 152, 0); // Orange
-                                break;
-                            case EquipmentStatus.CheckedIn:
-                                colorBrush.Color = Color.FromRgb(76, 175, 80); // Green
-                                break;
-                            case EquipmentStatus.Missing:
-                                colorBrush.Color = Color.FromRgb(244, 67, 54); // Red
-                                break;
-                            case EquipmentStatus.Damaged:
-                                colorBrush.Color = Color.FromRgb(233, 30, 99); // Pink
-                                break;
-                            default:
-                                colorBrush.Color = Color.FromRgb(158, 158, 158); // Gray
-                                break;
+                            colorBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
                         }
+                        else
+                        {
+                            colorBrush = new SolidColorBrush(Colors.Gray);
+                        }
+
                         _currentHoldButton.Background = colorBrush;
                     }
                     catch (Exception ex)
@@ -229,8 +224,12 @@ namespace Pack_Track
             // Use Dispatcher to ensure UI is updated
             Dispatcher.BeginInvoke(new Action(() =>
             {
+                // Find any ScrollViewer in the window
+                var scrollViewer = FindVisualChild<ScrollViewer>(this);
+                if (scrollViewer == null) return;
+
                 // Find the ItemsControl
-                var itemsControl = FindVisualChild<ItemsControl>(MainScrollViewer);
+                var itemsControl = FindVisualChild<ItemsControl>(scrollViewer);
                 if (itemsControl == null) return;
 
                 // Look for the scene in the visual tree
@@ -308,6 +307,23 @@ namespace Pack_Track
                     return childOfChild;
             }
             return null;
+        }
+    }
+
+    // Template selector for scenes vs transitions
+    public class SceneTransitionTemplateSelector : DataTemplateSelector
+    {
+        public DataTemplate? SceneTemplate { get; set; }
+        public DataTemplate? TransitionTemplate { get; set; }
+
+        public override DataTemplate? SelectTemplate(object item, DependencyObject container)
+        {
+            return item switch
+            {
+                SceneOperationViewModel => SceneTemplate,
+                TransitionOperationViewModel => TransitionTemplate,
+                _ => base.SelectTemplate(item, container)
+            };
         }
     }
 }

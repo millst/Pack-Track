@@ -1,4 +1,4 @@
-﻿// Converters/ValueConverters.cs - Fixed version
+﻿// Converters/ValueConverters.cs - Updated with better boolean handling
 using System;
 using System.Globalization;
 using System.Windows;
@@ -47,21 +47,34 @@ namespace Pack_Track.Converters
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return value is bool boolValue ? !boolValue : false;
+            if (targetType == typeof(bool) || targetType == typeof(bool?))
+            {
+                return value is bool boolValue ? !boolValue : false;
+            }
+
+            if (targetType == typeof(Visibility) || targetType == typeof(Visibility?))
+            {
+                bool isVisible = value is bool boolValue2 ? !boolValue2 : true;
+                return isVisible ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            return value is bool boolValue3 ? !boolValue3 : false;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return value is bool boolValue ? !boolValue : false;
+            if (value is bool boolValue)
+                return !boolValue;
+            if (value is Visibility visibility)
+                return visibility != Visibility.Visible;
+            return false;
         }
     }
-    // Updated BooleanToVisibilityConverter with debug output
+
     public class BooleanToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            System.Diagnostics.Debug.WriteLine($"BooleanToVisibilityConverter - Value: {value}, Type: {value?.GetType()}, Parameter: {parameter}");
-
             bool isVisible = false;
 
             if (value is bool boolValue)
@@ -73,20 +86,26 @@ namespace Pack_Track.Converters
                 isVisible = true; // Non-null object = visible
             }
 
+            // Handle inverse parameter
             if (parameter?.ToString() == "Inverse" || parameter?.ToString() == "Invert")
             {
                 isVisible = !isVisible;
             }
 
-            var result = isVisible ? Visibility.Visible : Visibility.Collapsed;
-            System.Diagnostics.Debug.WriteLine($"BooleanToVisibilityConverter - Result: {result}");
-
-            return result;
+            return isVisible ? Visibility.Visible : Visibility.Collapsed;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            throw new NotImplementedException();
+            bool isVisible = value is Visibility visibility && visibility == Visibility.Visible;
+
+            // Handle inverse parameter
+            if (parameter?.ToString() == "Inverse" || parameter?.ToString() == "Invert")
+            {
+                isVisible = !isVisible;
+            }
+
+            return isVisible;
         }
     }
 
