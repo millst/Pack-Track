@@ -1,4 +1,4 @@
-﻿// ViewModels/SceneBySceneLiveOperationsViewModel.cs - Fixed version with proper access methods
+﻿// ViewModels/SceneBySceneLiveOperationsViewModel.cs - Complete clean version
 using Pack_Track.Models;
 using Pack_Track.Services;
 using System.Collections.ObjectModel;
@@ -48,32 +48,191 @@ namespace Pack_Track.ViewModels
 
             if (_show?.Scenes == null) return;
 
+            System.Diagnostics.Debug.WriteLine($"=== LoadSceneOperations START ===");
+            System.Diagnostics.Debug.WriteLine($"Total scenes: {_show.Scenes.Count}");
+
             // Generate scene transitions first
             _show.GenerateSceneTransitions(_allProducts);
+            System.Diagnostics.Debug.WriteLine($"Generated {_show.SceneTransitions.Count} transitions");
 
             var orderedScenes = _show.Scenes.OrderBy(s => s.SceneNumber).ToList();
 
             for (int i = 0; i < orderedScenes.Count; i++)
             {
                 var scene = orderedScenes[i];
+                System.Diagnostics.Debug.WriteLine($"Processing Scene {scene.SceneNumber}: {scene.Name}");
+
                 var sceneOperation = new SceneOperationViewModel(scene, _show, _allProducts, this);
                 SceneOperations.Add(sceneOperation);
 
                 // Add transition after each scene (except the last one)
                 if (i < orderedScenes.Count - 1)
                 {
-                    var transition = _show.SceneTransitions.FirstOrDefault(t =>
-                        t.FromSceneNumber == scene.SceneNumber);
+                    var nextScene = orderedScenes[i + 1];
+                    System.Diagnostics.Debug.WriteLine($"Looking for transition from Scene {scene.SceneNumber} to Scene {nextScene.SceneNumber}");
 
-                    if (transition != null && transition.Actions.Any())
+                    var transition = _show.SceneTransitions.FirstOrDefault(t =>
+                        t.FromSceneNumber == scene.SceneNumber && t.ToSceneNumber == nextScene.SceneNumber);
+
+                    if (transition != null)
                     {
-                        var transitionViewModel = new SceneTransitionViewModel(transition, _show);
-                        SceneOperations.Add(new TransitionOperationViewModel(transitionViewModel));
+                        System.Diagnostics.Debug.WriteLine($"Found transition with {transition.Actions.Count} actions");
+                        foreach (var action in transition.Actions)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"  Action: {action.Type} - {action.Description}");
+                        }
+
+                        if (transition.Actions.Any())
+                        {
+                            var transitionViewModel = new SceneTransitionViewModel(transition, _show);
+                            SceneOperations.Add(new TransitionOperationViewModel(transitionViewModel));
+                            System.Diagnostics.Debug.WriteLine($"Added transition to SceneOperations");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Transition has no actions, not adding to display");
+                        }
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"No transition found, creating manual transition");
+
+                        // Let's debug what allocations exist
+                        System.Diagnostics.Debug.WriteLine($"Scene {scene.SceneNumber} allocations: {scene.Allocations.Count}");
+                        foreach (var alloc in scene.Allocations)
+                        {
+                            var product = _allProducts.FirstOrDefault(p => p.Id == alloc.ProductId);
+                            var actor = _show.Cast.FirstOrDefault(a => a.Id == alloc.ActorId);
+                            System.Diagnostics.Debug.WriteLine($"  {product?.Name} ({alloc.AssetInfo}) -> {actor?.DisplayName}");
+                        }
+
+                        System.Diagnostics.Debug.WriteLine($"Scene {nextScene.SceneNumber} allocations: {nextScene.Allocations.Count}");
+                        foreach (var alloc in nextScene.Allocations)
+                        {
+                            var product = _allProducts.FirstOrDefault(p => p.Id == alloc.ProductId);
+                            var actor = _show.Cast.FirstOrDefault(a => a.Id == alloc.ActorId);
+                            System.Diagnostics.Debug.WriteLine($"  {product?.Name} ({alloc.AssetInfo}) -> {actor?.DisplayName}");
+                        }
+
+                        // Create a manual transition
+                        var manualTransition = CreateManualTransition(scene, nextScene);
+                        if (manualTransition != null && manualTransition.Actions.Any())
+                        {
+                            _show.SceneTransitions.Add(manualTransition);
+                            var transitionViewModel = new SceneTransitionViewModel(manualTransition, _show);
+                            SceneOperations.Add(new TransitionOperationViewModel(transitionViewModel));
+                            System.Diagnostics.Debug.WriteLine($"Created and added manual transition with {manualTransition.Actions.Count} actions");
+                        }
                     }
                 }
             }
 
+            System.Diagnostics.Debug.WriteLine($"Final SceneOperations count: {SceneOperations.Count}");
             RefreshCounts();
+        }
+
+        private SceneTransition? CreateManualTransition(Scene fromScene, Scene toScene)
+        {
+            var transition = new SceneTransition
+            {
+                FromSceneNumber = fromScene.SceneNumber,
+                ToSceneNumber = toScene.SceneNumber
+            };
+
+            var fromAllocations = fromScene.Allocations.ToList();
+            var toAllocations = toScene.Allocations.ToList();
+
+            // Find equipment that needs to be checked in (in fromScene but not in toScene)
+            foreach (var fromAllocation in fromAllocations)
+            {
+                var product = _allProducts.FirstOrDefault(p => p.Id == fromAllocation.ProductId);
+                if (product == null) continue;
+
+                var stillNeeded = toAllocations.Any(a =>
+                    a.ProductId == fromAllocation.ProductId &&
+                    a.AssetInfo == fromAllocation.AssetInfo);
+
+                if (!stillNeeded)
+                {
+                    var fromActor = _show.Cast.FirstOrDefault(a => a.Id == fromAllocation.ActorId);
+                    if (fromActor != null)
+                    {
+                        transition.Actions.Add(new TransitionAction
+                        {
+                            Type = TransitionType.CheckIn,
+                            ProductId = fromAllocation.ProductId,
+                            AssetNumber = fromAllocation.AssetInfo ?? "",
+                            FromActorId = fromAllocation.ActorId,
+                            ToActorId = Guid.Empty,
+                            Product = product,
+                            FromActor = fromActor,
+                            ToActor = null
+                        });
+                    }
+                }
+            }
+
+            // Find equipment that needs to be checked out or transferred
+            foreach (var toAllocation in toAllocations)
+            {
+                var product = _allProducts.FirstOrDefault(p => p.Id == toAllocation.ProductId);
+                if (product == null) continue;
+
+                var wasWithSameActor = fromAllocations.Any(a =>
+                    a.ProductId == toAllocation.ProductId &&
+                    a.AssetInfo == toAllocation.AssetInfo &&
+                    a.ActorId == toAllocation.ActorId);
+
+                if (wasWithSameActor) continue; // No action needed
+
+                var wasWithDifferentActor = fromAllocations.FirstOrDefault(a =>
+                    a.ProductId == toAllocation.ProductId &&
+                    a.AssetInfo == toAllocation.AssetInfo &&
+                    a.ActorId != toAllocation.ActorId);
+
+                if (wasWithDifferentActor != null)
+                {
+                    // Transfer between actors
+                    var fromActor = _show.Cast.FirstOrDefault(a => a.Id == wasWithDifferentActor.ActorId);
+                    var toActor = _show.Cast.FirstOrDefault(a => a.Id == toAllocation.ActorId);
+
+                    if (fromActor != null && toActor != null)
+                    {
+                        transition.Actions.Add(new TransitionAction
+                        {
+                            Type = TransitionType.Transfer,
+                            ProductId = toAllocation.ProductId,
+                            AssetNumber = toAllocation.AssetInfo ?? "",
+                            FromActorId = wasWithDifferentActor.ActorId,
+                            ToActorId = toAllocation.ActorId,
+                            Product = product,
+                            FromActor = fromActor,
+                            ToActor = toActor
+                        });
+                    }
+                }
+                else
+                {
+                    // New checkout
+                    var toActor = _show.Cast.FirstOrDefault(a => a.Id == toAllocation.ActorId);
+                    if (toActor != null)
+                    {
+                        transition.Actions.Add(new TransitionAction
+                        {
+                            Type = TransitionType.CheckOut,
+                            ProductId = toAllocation.ProductId,
+                            AssetNumber = toAllocation.AssetInfo ?? "",
+                            FromActorId = Guid.Empty,
+                            ToActorId = toAllocation.ActorId,
+                            Product = product,
+                            FromActor = null,
+                            ToActor = toActor
+                        });
+                    }
+                }
+            }
+
+            return transition.Actions.Any() ? transition : null;
         }
 
         public void RefreshCounts()
@@ -84,14 +243,12 @@ namespace Pack_Track.ViewModels
             OnPropertyChanged(nameof(TotalAvailableCount));
             OnPropertyChanged(nameof(TotalMissingCount));
 
-            // Refresh scene counts by calling their public refresh methods
             foreach (var sceneOp in SceneOperations.OfType<SceneOperationViewModel>())
             {
                 sceneOp.RefreshSceneCounts();
             }
         }
 
-        // Public method to refresh main counts only
         public void RefreshMainCounts()
         {
             OnPropertyChanged(nameof(TotalEquipmentCount));
@@ -101,7 +258,6 @@ namespace Pack_Track.ViewModels
             OnPropertyChanged(nameof(TotalMissingCount));
         }
 
-        // Public method to refresh all asset buttons
         public void RefreshAllAssetButtons()
         {
             foreach (var sceneOp in SceneOperations.OfType<SceneOperationViewModel>())
@@ -190,7 +346,6 @@ namespace Pack_Track.ViewModels
             _parentViewModel = parentViewModel;
 
             ActorEquipmentGroups = new ObservableCollection<ActorEquipmentGroupViewModel>();
-
             CheckOutAllSceneCommand = new RelayCommand(CheckOutAll);
             CheckInAllSceneCommand = new RelayCommand(CheckInAll);
 
@@ -199,7 +354,6 @@ namespace Pack_Track.ViewModels
 
         public Scene Scene => _scene;
         public ObservableCollection<ActorEquipmentGroupViewModel> ActorEquipmentGroups { get; }
-
         public string SceneTitle => $"Scene {_scene.SceneNumber}: {_scene.Name}";
         public int SceneEquipmentCount => ActorEquipmentGroups.Sum(a => a.AssetItems.Count);
         public int SceneCheckedOutCount => ActorEquipmentGroups.Sum(a => a.AssetItems.Count(i => i.Status == EquipmentStatus.CheckedOut && i.IsAssignedToThisActor));
@@ -214,7 +368,6 @@ namespace Pack_Track.ViewModels
 
             if (_scene.Allocations == null || !_scene.Allocations.Any()) return;
 
-            // Group allocations by actor
             var actorGroups = _scene.Allocations.GroupBy(a => a.ActorId);
 
             foreach (var actorGroup in actorGroups)
@@ -224,7 +377,6 @@ namespace Pack_Track.ViewModels
 
                 if (actor == null) continue;
 
-                // Create asset items for each allocation
                 var assetItems = new List<AssetItemViewModel>();
 
                 foreach (var allocation in actorGroup)
@@ -232,10 +384,8 @@ namespace Pack_Track.ViewModels
                     var product = _allProducts.FirstOrDefault(p => p.Id == allocation.ProductId);
                     if (product == null) continue;
 
-                    // Get or create shared asset status for this physical asset
                     var assetStatus = GetOrCreateSharedAssetStatus(allocation.ProductId, allocation.AssetInfo ?? "");
 
-                    // Create the allocation with assets object
                     var allocationWithAssets = new AllocationWithAssets
                     {
                         AllocationId = allocation.Id,
@@ -252,15 +402,14 @@ namespace Pack_Track.ViewModels
                     var assetItem = new AssetItemViewModel(allocationWithAssets, _show, null, _allProducts);
                     assetItems.Add(assetItem);
 
-                    // Add accessories for this product
+                    // Add accessories
                     if (product.Accessories != null && product.Accessories.Any())
                     {
                         foreach (var accessory in product.Accessories)
                         {
-                            // Create a unique asset number for this accessory instance
                             var accessoryAssetNumber = $"ACC_{accessory.Id:N}_{allocation.AssetInfo}";
-
                             var accessoryStatus = GetOrCreateSharedAssetStatus(accessory.Id, accessoryAssetNumber);
+
                             var accessoryAllocation = new AllocationWithAssets
                             {
                                 AllocationId = allocation.Id,
@@ -290,17 +439,11 @@ namespace Pack_Track.ViewModels
 
         private AssetStatus GetOrCreateSharedAssetStatus(Guid productId, string assetNumber)
         {
-            // Look for existing asset status with the same product ID and asset number
             var existing = _show.AssetStatuses.FirstOrDefault(a =>
-                a.ProductId == productId &&
-                a.AssetNumber == assetNumber);
+                a.ProductId == productId && a.AssetNumber == assetNumber);
 
-            if (existing != null)
-            {
-                return existing;
-            }
+            if (existing != null) return existing;
 
-            // Create new shared asset status
             var newStatus = new AssetStatus
             {
                 ProductId = productId,
@@ -319,7 +462,6 @@ namespace Pack_Track.ViewModels
             OnPropertyChanged(nameof(SceneCheckedInCount));
         }
 
-        // Public method to refresh just the scene counts without circular calls
         public void RefreshSceneCounts()
         {
             OnPropertyChanged(nameof(SceneEquipmentCount));
@@ -362,21 +504,7 @@ namespace Pack_Track.ViewModels
             Actor = actor;
             _show = show;
             _parentViewModel = parentViewModel;
-
             AssetItems = new ObservableCollection<AssetItemViewModel>(assetItems);
-
-            // Subscribe to changes in asset items
-            foreach (var item in AssetItems)
-            {
-                item.PropertyChanged += (s, e) =>
-                {
-                    if (e.PropertyName == nameof(AssetItemViewModel.Status))
-                    {
-                        // Only refresh our own counts, don't trigger parent refresh to avoid circular calls
-                        // The parent will be notified through RefreshCounts when needed
-                    }
-                };
-            }
         }
 
         public Actor Actor { get; }
@@ -384,19 +512,10 @@ namespace Pack_Track.ViewModels
 
         public void RefreshCounts()
         {
-            // Only refresh the parent counts, don't create circular calls
             if (_parentViewModel is SceneBySceneLiveOperationsViewModel sceneByScene)
             {
-                // Call the public refresh method instead of accessing protected members
                 sceneByScene.RefreshMainCounts();
             }
-        }
-
-        // Public method to refresh just this group's properties
-        public void RefreshGroupCounts()
-        {
-            // Can call our own protected method
-            OnPropertyChanged(nameof(AssetItems));
         }
     }
 
@@ -416,7 +535,6 @@ namespace Pack_Track.ViewModels
 
             ToggleStatusCommand = new RelayCommand(ToggleStatus);
 
-            // Subscribe to asset status changes
             if (_allocation.AssetStatus != null)
             {
                 _allocation.AssetStatus.PropertyChanged += OnAssetStatusChanged;
@@ -428,7 +546,6 @@ namespace Pack_Track.ViewModels
             if (e.PropertyName == nameof(AssetStatus.Status) ||
                 e.PropertyName == nameof(AssetStatus.CurrentlyAssignedToActorId))
             {
-                // Force refresh of all properties
                 OnPropertyChanged(nameof(Status));
                 OnPropertyChanged(nameof(ButtonText));
                 OnPropertyChanged(nameof(ButtonColor));
@@ -436,32 +553,17 @@ namespace Pack_Track.ViewModels
                 OnPropertyChanged(nameof(CanCheckOut));
                 OnPropertyChanged(nameof(CanCheckIn));
                 OnPropertyChanged(nameof(IsAssignedToThisActor));
-
-                // Only refresh parent counts, don't trigger full refresh to avoid circular calls
                 _parentGroup?.RefreshCounts();
             }
         }
 
         public string ProductName => _allocation.Product?.Name ?? "Unknown";
         public EquipmentStatus Status => _allocation.AssetStatus?.Status ?? EquipmentStatus.Available;
+        public bool IsAssignedToThisActor => _allocation.AssetStatus?.CurrentlyAssignedToActorId == _allocation.ActorId;
+        public bool CanCheckOut => _allocation.AssetStatus?.IsAvailable == true;
+        public bool CanCheckIn => _allocation.AssetStatus?.IsCheckedOut == true && IsAssignedToThisActor;
+        public bool CanInteract => CanCheckOut || CanCheckIn || Status == EquipmentStatus.Missing || Status == EquipmentStatus.Damaged;
 
-        // Check if this asset is currently assigned to this actor
-        public bool IsAssignedToThisActor =>
-            _allocation.AssetStatus?.CurrentlyAssignedToActorId == _allocation.ActorId;
-
-        // Check if this asset is available for checkout by this actor
-        public bool CanCheckOut =>
-            _allocation.AssetStatus?.IsAvailable == true;
-
-        // Check if this asset can be checked in by this actor
-        public bool CanCheckIn =>
-            _allocation.AssetStatus?.IsCheckedOut == true && IsAssignedToThisActor;
-
-        // Check if user can interact with this button
-        public bool CanInteract => CanCheckOut || CanCheckIn ||
-            Status == EquipmentStatus.Missing || Status == EquipmentStatus.Damaged;
-
-        // Clear, descriptive button text that shows CURRENT STATE → ACTION
         public string ButtonText
         {
             get
@@ -470,31 +572,24 @@ namespace Pack_Track.ViewModels
                 {
                     case EquipmentStatus.Available:
                         return "📦 Ready → Check Out";
-
                     case EquipmentStatus.CheckedOut when IsAssignedToThisActor:
                         return "✅ With Actor → Check In";
-
                     case EquipmentStatus.CheckedOut when !IsAssignedToThisActor:
                         var currentActor = _show.Cast.FirstOrDefault(a => a.Id == _allocation.AssetStatus?.CurrentlyAssignedToActorId);
                         var actorName = currentActor?.DisplayName ?? "Another Actor";
                         return $"🔒 With {actorName}";
-
                     case EquipmentStatus.CheckedIn:
                         return "🏠 Returned → Check Out";
-
                     case EquipmentStatus.Missing:
                         return "❌ Missing → Mark Found";
-
                     case EquipmentStatus.Damaged:
                         return "⚠️ Damaged → Mark Repaired";
-
                     default:
                         return "❓ Unknown State";
                 }
             }
         }
 
-        // Color coding that matches the button text meaning
         public string ButtonColor
         {
             get
@@ -502,25 +597,19 @@ namespace Pack_Track.ViewModels
                 switch (Status)
                 {
                     case EquipmentStatus.Available:
-                        return "#2196F3"; // Blue - ready to go
-
+                        return "#2196F3";
                     case EquipmentStatus.CheckedOut when IsAssignedToThisActor:
-                        return "#4CAF50"; // Green - success, you have it
-
+                        return "#4CAF50";
                     case EquipmentStatus.CheckedOut when !IsAssignedToThisActor:
-                        return "#FF9800"; // Orange - locked/unavailable
-
+                        return "#FF9800";
                     case EquipmentStatus.CheckedIn:
-                        return "#2196F3"; // Blue - ready to check out again
-
+                        return "#2196F3";
                     case EquipmentStatus.Missing:
-                        return "#F44336"; // Red - problem
-
+                        return "#F44336";
                     case EquipmentStatus.Damaged:
-                        return "#E91E63"; // Pink - problem
-
+                        return "#E91E63";
                     default:
-                        return "#9E9E9E"; // Gray - unknown
+                        return "#9E9E9E";
                 }
             }
         }
@@ -571,19 +660,14 @@ namespace Pack_Track.ViewModels
 
         private void RefreshAllSceneOperations()
         {
-            // Refresh parent group counts
             _parentGroup?.RefreshCounts();
-
-            // Force property change notifications on this item only
             RefreshButtonProperties();
 
-            // Refresh the main view model counts and all buttons
             if (_parentGroup?._parentViewModel is SceneBySceneLiveOperationsViewModel mainViewModel)
             {
                 mainViewModel.RefreshMainCounts();
                 mainViewModel.RefreshAllAssetButtons();
 
-                // Refresh scene counts
                 foreach (var sceneOp in mainViewModel.SceneOperations.OfType<SceneOperationViewModel>())
                 {
                     sceneOp.RefreshSceneCounts();
@@ -591,7 +675,6 @@ namespace Pack_Track.ViewModels
             }
         }
 
-        // Public method to refresh button properties
         public void RefreshButtonProperties()
         {
             OnPropertyChanged(nameof(ButtonText));
@@ -636,12 +719,10 @@ namespace Pack_Track.ViewModels
         }
     }
 
-    // Interface for scene operations (scenes and transitions)
     public interface ISceneOperation
     {
     }
 
-    // Wrapper for transition operations
     public class TransitionOperationViewModel : BaseViewModel, ISceneOperation
     {
         public TransitionOperationViewModel(SceneTransitionViewModel transitionViewModel)
