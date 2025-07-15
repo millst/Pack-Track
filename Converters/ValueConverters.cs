@@ -1,4 +1,4 @@
-﻿// Converters/ValueConverters.cs - Updated with better boolean handling
+﻿// Converters/ValueConverters.cs - Updated with better boolean handling and expand converter
 using System;
 using System.Globalization;
 using System.Windows;
@@ -159,6 +159,23 @@ namespace Pack_Track.Converters
                 isVisible = !isVisible;
 
             return isVisible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class BooleanToExpandCollapseConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is bool isExpanded)
+            {
+                return isExpanded ? "▼" : "▶";
+            }
+            return "▶";
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

@@ -1,4 +1,4 @@
-﻿// MainWindow.xaml.cs - Clean version with scene transitions
+﻿// MainWindow.xaml.cs - Fixed version with damaged->lost progression
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -40,7 +40,11 @@ namespace Pack_Track
         {
             if (e.PropertyName == nameof(MainViewModel.SelectedSceneFromButtons))
             {
-                ScrollToScene(_viewModel.SelectedSceneFromButtons);
+                if (_viewModel.SelectedSceneFromButtons != null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"SelectedSceneFromButtons changed to: {_viewModel.SelectedSceneFromButtons.Name}");
+                    ScrollToScene(_viewModel.SelectedSceneFromButtons);
+                }
             }
         }
 
@@ -50,19 +54,21 @@ namespace Pack_Track
             {
                 if (sender is Button button && button.Tag is AssetItemViewModel assetItem)
                 {
-                    // Only start hold timer for checked out items (when showing "Check In")
-                    if (assetItem.Status != EquipmentStatus.CheckedOut || !assetItem.IsAssignedToThisActor) return;
+                    // Start hold timer for checked out items or damaged items
+                    if ((assetItem.Status == EquipmentStatus.CheckedOut && assetItem.IsAssignedToThisActor) ||
+                        assetItem.Status == EquipmentStatus.Damaged)
+                    {
+                        _currentHoldItem = assetItem;
+                        _currentHoldButton = button;
+                        _holdStage = 0;
+                        _holdTimer = new DispatcherTimer();
+                        _holdTimer.Interval = TimeSpan.FromSeconds(3);
+                        _holdTimer.Tick += HoldTimer_Tick;
+                        _holdTimer.Start();
 
-                    _currentHoldItem = assetItem;
-                    _currentHoldButton = button;
-                    _holdStage = 0;
-                    _holdTimer = new DispatcherTimer();
-                    _holdTimer.Interval = TimeSpan.FromSeconds(3);
-                    _holdTimer.Tick += HoldTimer_Tick;
-                    _holdTimer.Start();
-
-                    // Visual feedback - change button color to indicate hold is active
-                    button.Background = new SolidColorBrush(Color.FromRgb(255, 193, 7)); // Warning yellow
+                        // Visual feedback - change button color to indicate hold is active
+                        button.Background = new SolidColorBrush(Color.FromRgb(255, 193, 7)); // Warning yellow
+                    }
                 }
             }
             catch (Exception ex)
@@ -160,54 +166,57 @@ namespace Pack_Track
 
             _holdStage++;
 
-            switch (_holdStage)
+            try
             {
-                case 1: // First 3 seconds - mark as damaged
-                    try
+                // Check current status to determine what action to take
+                if (_currentHoldItem.Status == EquipmentStatus.CheckedOut && _holdStage == 1)
+                {
+                    // First hold on checked out item - mark as damaged
+                    MarkAsDamaged(_currentHoldItem);
+                    if (_currentHoldButton != null)
                     {
-                        MarkAsDamaged(_currentHoldItem);
-                        if (_currentHoldButton != null)
-                        {
-                            _currentHoldButton.Background = new SolidColorBrush(Color.FromRgb(233, 30, 99)); // Pink for damaged
-                        }
-                        _holdTimer?.Stop();
-                        // Start timer for lost
-                        _holdTimer = new DispatcherTimer();
-                        _holdTimer.Interval = TimeSpan.FromSeconds(3);
-                        _holdTimer.Tick += HoldTimer_Tick;
-                        _holdTimer.Start();
+                        _currentHoldButton.Background = new SolidColorBrush(Color.FromRgb(233, 30, 99)); // Pink for damaged
                     }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Error in HoldTimer stage 1: {ex.Message}");
-                        StopHoldTimer();
-                    }
-                    break;
 
-                case 2: // Second 3 seconds - mark as lost
-                    try
+                    // Reset for next stage (damaged -> lost)
+                    _holdStage = 0;
+                    _holdTimer?.Stop();
+                    _holdTimer = new DispatcherTimer();
+                    _holdTimer.Interval = TimeSpan.FromSeconds(3);
+                    _holdTimer.Tick += HoldTimer_Tick;
+                    _holdTimer.Start();
+                }
+                else if (_currentHoldItem.Status == EquipmentStatus.Damaged && _holdStage == 1)
+                {
+                    // Second hold on damaged item - mark as lost
+                    MarkAsLost(_currentHoldItem);
+                    if (_currentHoldButton != null)
                     {
-                        MarkAsLost(_currentHoldItem);
-                        if (_currentHoldButton != null)
-                        {
-                            _currentHoldButton.Background = new SolidColorBrush(Color.FromRgb(244, 67, 54)); // Red for lost
-                        }
-                        StopHoldTimer();
+                        _currentHoldButton.Background = new SolidColorBrush(Color.FromRgb(244, 67, 54)); // Red for lost
                     }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Error in HoldTimer stage 2: {ex.Message}");
-                        StopHoldTimer();
-                    }
-                    break;
+                    StopHoldTimer();
+                }
+                else
+                {
+                    // Shouldn't happen, but stop timer
+                    StopHoldTimer();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in HoldTimer_Tick: {ex.Message}");
+                StopHoldTimer();
             }
         }
 
         private void MarkAsDamaged(AssetItemViewModel assetItem)
         {
             assetItem.MarkAsDamaged();
-            MessageBox.Show($"{assetItem.ProductName} marked as DAMAGED", "Equipment Status Changed",
+            MessageBox.Show($"{assetItem.ProductName} marked as DAMAGED\n\nHold again for 3 seconds to mark as LOST", "Equipment Status Changed",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
+
+            // Refresh run summaries
+            _viewModel.RefreshRunSummaries();
         }
 
         private void MarkAsLost(AssetItemViewModel assetItem)
@@ -215,43 +224,84 @@ namespace Pack_Track
             assetItem.MarkAsLost();
             MessageBox.Show($"{assetItem.ProductName} marked as LOST/MISSING", "Equipment Status Changed",
                 MessageBoxButton.OK, MessageBoxImage.Error);
+
+            // Refresh run summaries
+            _viewModel.RefreshRunSummaries();
+        }
+
+        // Public method to refresh runs dropdown when called from show setup
+        public void RefreshRunsDropdown()
+        {
+            _viewModel.RefreshRunsDropdown();
         }
 
         private void ScrollToScene(Scene? targetScene)
         {
             if (targetScene == null) return;
 
+            System.Diagnostics.Debug.WriteLine($"ScrollToScene called for: {targetScene.Name}");
+
             // Use Dispatcher to ensure UI is updated
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                // Find any ScrollViewer in the window
-                var scrollViewer = FindVisualChild<ScrollViewer>(this);
-                if (scrollViewer == null) return;
-
-                // Find the ItemsControl
-                var itemsControl = FindVisualChild<ItemsControl>(scrollViewer);
-                if (itemsControl == null) return;
-
-                // Look for the scene in the visual tree
-                for (int i = 0; i < itemsControl.Items.Count; i++)
+                try
                 {
-                    if (itemsControl.Items[i] is SceneOperationViewModel sceneOp &&
-                        sceneOp.Scene.Id == targetScene.Id)
+                    // Find the main ScrollViewer
+                    var scrollViewer = MainScrollViewer; // Direct reference to named element
+                    if (scrollViewer == null)
                     {
-                        // Get the container for this item
-                        var container = itemsControl.ItemContainerGenerator.ContainerFromIndex(i) as FrameworkElement;
-                        if (container != null)
-                        {
-                            // Scroll to the container
-                            container.BringIntoView();
-
-                            // Add a highlight effect
-                            HighlightSceneCard(container);
-                        }
-                        break;
+                        System.Diagnostics.Debug.WriteLine("MainScrollViewer not found");
+                        return;
                     }
+
+                    // Find the ItemsControl inside the ScrollViewer
+                    var itemsControl = FindVisualChild<ItemsControl>(scrollViewer);
+                    if (itemsControl == null)
+                    {
+                        System.Diagnostics.Debug.WriteLine("ItemsControl not found");
+                        return;
+                    }
+
+                    System.Diagnostics.Debug.WriteLine($"Found ItemsControl with {itemsControl.Items.Count} items");
+
+                    // Look for the scene in the visual tree
+                    for (int i = 0; i < itemsControl.Items.Count; i++)
+                    {
+                        var item = itemsControl.Items[i];
+                        System.Diagnostics.Debug.WriteLine($"Item {i}: {item?.GetType().Name}");
+
+                        if (item is SceneOperationViewModel sceneOp &&
+                            sceneOp.Scene.Id == targetScene.Id)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Found matching scene at index {i}");
+
+                            // Get the container for this item
+                            var container = itemsControl.ItemContainerGenerator.ContainerFromIndex(i) as FrameworkElement;
+                            if (container != null)
+                            {
+                                System.Diagnostics.Debug.WriteLine("Found container, bringing into view");
+
+                                // Scroll to the container
+                                container.BringIntoView();
+
+                                // Add a highlight effect
+                                HighlightSceneCard(container);
+                                return;
+                            }
+                            else
+                            {
+                                System.Diagnostics.Debug.WriteLine("Container not found for scene");
+                            }
+                        }
+                    }
+
+                    System.Diagnostics.Debug.WriteLine("Target scene not found in items");
                 }
-            }), DispatcherPriority.Loaded);
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error in ScrollToScene: {ex.Message}");
+                }
+            }), DispatcherPriority.Background);
         }
 
         private void HighlightSceneCard(FrameworkElement container)

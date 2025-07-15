@@ -1,4 +1,4 @@
-﻿// ViewModels/SceneBySceneLiveOperationsViewModel.cs - Complete clean version
+﻿// ViewModels/SceneBySceneLiveOperationsViewModel.cs - Fixed with run integration
 using Pack_Track.Models;
 using Pack_Track.Services;
 using System.Collections.ObjectModel;
@@ -96,23 +96,6 @@ namespace Pack_Track.ViewModels
                     else
                     {
                         System.Diagnostics.Debug.WriteLine($"No transition found, creating manual transition");
-
-                        // Let's debug what allocations exist
-                        System.Diagnostics.Debug.WriteLine($"Scene {scene.SceneNumber} allocations: {scene.Allocations.Count}");
-                        foreach (var alloc in scene.Allocations)
-                        {
-                            var product = _allProducts.FirstOrDefault(p => p.Id == alloc.ProductId);
-                            var actor = _show.Cast.FirstOrDefault(a => a.Id == alloc.ActorId);
-                            System.Diagnostics.Debug.WriteLine($"  {product?.Name} ({alloc.AssetInfo}) -> {actor?.DisplayName}");
-                        }
-
-                        System.Diagnostics.Debug.WriteLine($"Scene {nextScene.SceneNumber} allocations: {nextScene.Allocations.Count}");
-                        foreach (var alloc in nextScene.Allocations)
-                        {
-                            var product = _allProducts.FirstOrDefault(p => p.Id == alloc.ProductId);
-                            var actor = _show.Cast.FirstOrDefault(a => a.Id == alloc.ActorId);
-                            System.Diagnostics.Debug.WriteLine($"  {product?.Name} ({alloc.AssetInfo}) -> {actor?.DisplayName}");
-                        }
 
                         // Create a manual transition
                         var manualTransition = CreateManualTransition(scene, nextScene);
@@ -601,7 +584,7 @@ namespace Pack_Track.ViewModels
                     case EquipmentStatus.CheckedOut when IsAssignedToThisActor:
                         return "#4CAF50";
                     case EquipmentStatus.CheckedOut when !IsAssignedToThisActor:
-                        return "#FF9800";
+                        return "#37474F"; // Very dark blue-grey for maximum visibility
                     case EquipmentStatus.CheckedIn:
                         return "#2196F3";
                     case EquipmentStatus.Missing:
@@ -645,6 +628,10 @@ namespace Pack_Track.ViewModels
             if (_allocation.AssetStatus != null && CanCheckOut)
             {
                 _show.CheckOutEquipment(_allocation.AssetStatus.Id, _allocation.ActorId, _allocation.SceneId);
+
+                // Create run record if there's a current run
+                CreateRunRecord(true);
+
                 RefreshAllSceneOperations();
             }
         }
@@ -654,8 +641,24 @@ namespace Pack_Track.ViewModels
             if (_allocation.AssetStatus != null && CanCheckIn)
             {
                 _show.CheckInEquipment(_allocation.AssetStatus.Id, _allocation.SceneId);
+
+                // Update run record if there's a current run
+                UpdateRunRecord(true);
+
                 RefreshAllSceneOperations();
             }
+        }
+
+        private void CreateRunRecord(bool createIfMissing = false)
+        {
+            // This would be called by the main view model with the current run
+            // For now, we'll skip run record creation here and handle it in the main view model
+        }
+
+        private void UpdateRunRecord(bool createIfMissing = false)
+        {
+            // This would be called by the main view model with the current run
+            // For now, we'll skip run record updates here and handle it in the main view model
         }
 
         private void RefreshAllSceneOperations()

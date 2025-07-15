@@ -1,4 +1,4 @@
-﻿// Models/Show.cs - Complete version with smart transitions
+﻿// Models/Show.cs - Complete version with enhanced run tracking
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -173,7 +173,7 @@ namespace Pack_Track.Models
             return transition;
         }
 
-        public bool CheckOutEquipment(Guid assetStatusId, Guid toActorId, Guid sceneId)
+        public bool CheckOutEquipment(Guid assetStatusId, Guid toActorId, Guid sceneId, Guid? runId = null)
         {
             var assetStatus = AssetStatuses.FirstOrDefault(a => a.Id == assetStatusId);
             if (assetStatus == null || !assetStatus.IsAvailable) return false;
@@ -197,10 +197,33 @@ namespace Pack_Track.Models
                 Type = TransactionType.CheckOut
             });
 
+            // Create run record if run is specified
+            if (runId.HasValue)
+            {
+                var run = Runs.FirstOrDefault(r => r.Id == runId.Value);
+                if (run != null)
+                {
+                    var allocation = Scenes.SelectMany(s => s.Allocations)
+                        .FirstOrDefault(a => a.ActorId == toActorId &&
+                                           a.ProductId == assetStatus.ProductId);
+
+                    if (allocation != null)
+                    {
+                        run.CheckInOutRecords.Add(new CheckInOutRecord
+                        {
+                            AllocationId = allocation.Id,
+                            CheckOutTime = DateTime.Now,
+                            Status = CheckInOutStatus.CheckedOut,
+                            Allocation = allocation
+                        });
+                    }
+                }
+            }
+
             return true;
         }
 
-        public bool CheckInEquipment(Guid assetStatusId, Guid sceneId)
+        public bool CheckInEquipment(Guid assetStatusId, Guid sceneId, Guid? runId = null)
         {
             var assetStatus = AssetStatuses.FirstOrDefault(a => a.Id == assetStatusId);
             if (assetStatus == null || !assetStatus.IsCheckedOut) return false;
@@ -223,6 +246,30 @@ namespace Pack_Track.Models
                 ToStatus = EquipmentStatus.CheckedIn,
                 Type = TransactionType.CheckIn
             });
+
+            // Update run record if run is specified
+            if (runId.HasValue)
+            {
+                var run = Runs.FirstOrDefault(r => r.Id == runId.Value);
+                if (run != null)
+                {
+                    var allocation = Scenes.SelectMany(s => s.Allocations)
+                        .FirstOrDefault(a => a.ActorId == fromActorId &&
+                                           a.ProductId == assetStatus.ProductId);
+
+                    if (allocation != null)
+                    {
+                        var record = run.CheckInOutRecords.FirstOrDefault(r =>
+                            r.AllocationId == allocation.Id && r.CheckInTime == null);
+
+                        if (record != null)
+                        {
+                            record.CheckInTime = DateTime.Now;
+                            record.Status = CheckInOutStatus.CheckedIn;
+                        }
+                    }
+                }
+            }
 
             return true;
         }
@@ -628,10 +675,14 @@ namespace Pack_Track.Models
         public Guid FromActorId { get; set; }
         public Guid ToActorId { get; set; }
 
-        // Navigation properties
+        // Navigation properties - these will be set at runtime, not serialized
+        [System.Text.Json.Serialization.JsonIgnore]
         public Product? Product { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
         public Actor? FromActor { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
         public Actor? ToActor { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
         public Show? Show { get; set; } // Add reference to show for status checking
 
         public bool IsCompleted

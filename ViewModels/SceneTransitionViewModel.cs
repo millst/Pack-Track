@@ -25,8 +25,6 @@ namespace Pack_Track.ViewModels
                 Actions.Add(new TransitionActionViewModel(action, this));
             }
 
-            CompleteAllCommand = new RelayCommand(CompleteAll, () => Actions.Any(a => a.IsVisible && !a.IsSmartCompleted));
-
             // Subscribe to asset status changes to update transition display
             foreach (var assetStatus in _show.AssetStatuses)
             {
@@ -81,25 +79,11 @@ namespace Pack_Track.ViewModels
 
         public ObservableCollection<TransitionActionViewModel> Actions { get; }
 
-        public ICommand CompleteAllCommand { get; }
-
-        private void CompleteAll()
-        {
-            // This could trigger the needed equipment moves automatically
-            // For now, just mark as completed (this might not be needed with smart tracking)
-            foreach (var action in Actions.Where(a => a.IsVisible && !a.IsSmartCompleted))
-            {
-                action.MarkCompleted();
-            }
-            RefreshProgress();
-        }
-
         public void RefreshProgress()
         {
             OnPropertyChanged(nameof(ProgressText));
             OnPropertyChanged(nameof(AllActionsCompleted));
             OnPropertyChanged(nameof(VisibleActions));
-            CommandManager.InvalidateRequerySuggested();
         }
     }
 

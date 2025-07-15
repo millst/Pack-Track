@@ -162,27 +162,32 @@ namespace Pack_Track.ViewModels
 
             System.Diagnostics.Debug.WriteLine($"Product type: {SelectedProduct.GetType().Name}");
 
-            // Update form based on selected product
+            // Update form based on selected product type - don't trigger global changes
             if (SelectedProduct is TrackedProduct trackedProduct)
             {
                 System.Diagnostics.Debug.WriteLine($"Setting up TrackedProduct. AssetNumber: {trackedProduct.AssetNumber}");
-                SelectedProductType = "Tracked Product (with asset numbers)";
+                _selectedProductType = "Tracked Product (with asset numbers)"; // Set backing field directly
                 AssetNumbers = trackedProduct.AssetNumber ?? string.Empty;
                 System.Diagnostics.Debug.WriteLine($"AssetNumbers set to: '{AssetNumbers}'");
             }
             else if (SelectedProduct is InventoryProduct inventoryProduct)
             {
                 System.Diagnostics.Debug.WriteLine($"Setting up InventoryProduct. Quantity: {inventoryProduct.QuantityTotal}");
-                SelectedProductType = "Inventory Product (quantity only)";
+                _selectedProductType = "Inventory Product (quantity only)"; // Set backing field directly
                 InventoryQuantity = inventoryProduct.QuantityTotal;
                 System.Diagnostics.Debug.WriteLine($"InventoryQuantity set to: {InventoryQuantity}");
             }
             else
             {
                 System.Diagnostics.Debug.WriteLine("Unknown product type, defaulting to TrackedProduct");
-                SelectedProductType = "Tracked Product (with asset numbers)";
+                _selectedProductType = "Tracked Product (with asset numbers)"; // Set backing field directly
                 AssetNumbers = string.Empty;
             }
+
+            // Notify UI of the product type change for this specific product only
+            OnPropertyChanged(nameof(SelectedProductType));
+            OnPropertyChanged(nameof(IsTrackedProduct));
+            OnPropertyChanged(nameof(IsInventoryProduct));
 
             System.Diagnostics.Debug.WriteLine($"Form updated. SelectedProductType: {SelectedProductType}");
 

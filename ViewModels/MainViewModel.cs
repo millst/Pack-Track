@@ -1,4 +1,4 @@
-﻿// ViewModels/MainViewModel.cs - Enhanced Tracking with Debug
+﻿// ViewModels/MainViewModel.cs - Enhanced with run isolation and fixes
 using Pack_Track.Models;
 using Pack_Track.Services;
 using System.Collections.ObjectModel;
@@ -17,6 +17,10 @@ namespace Pack_Track.ViewModels
         private string _statusMessage = "Ready";
         private SceneBySceneLiveOperationsViewModel? _enhancedLiveOperationsViewModel;
         private Scene? _selectedSceneFromButtons;
+        private Run? _selectedRun;
+        private RunSummaryViewModel? _currentRunSummary;
+        private AllRunsSummaryViewModel? _allRunsSummary;
+        private bool _allRunsSummaryExpanded = false;
 
         public MainViewModel(IDataService dataService)
         {
@@ -30,6 +34,7 @@ namespace Pack_Track.ViewModels
             ManageProductsCommand = new RelayCommand(ManageProducts);
             SetupShowCommand = new RelayCommand(SetupShow);
             JumpToSceneCommand = new RelayCommand<Scene>(JumpToScene);
+            ToggleAllRunsSummaryCommand = new RelayCommand(ToggleAllRunsSummary);
 
             SceneButtonCommands = new ObservableCollection<SceneButtonViewModel>();
 
@@ -76,14 +81,110 @@ namespace Pack_Track.ViewModels
                     System.Diagnostics.Debug.WriteLine($"=== CurrentShow changed to: {value?.Name} ===");
                     UpdateLiveOperations();
                     UpdateSceneButtons();
+                    UpdateRunSummaries();
+
+                    // Select first run by default
+                    if (value?.Runs?.Any() == true && SelectedRun == null)
+                    {
+                        SelectedRun = value.Runs.OrderBy(r => r.DateTime).First();
+                    }
                 }
             }
+        }
+
+        public Run? SelectedRun
+        {
+            get => _selectedRun;
+            set
+            {
+                if (SetProperty(ref _selectedRun, value))
+                {
+                    System.Diagnostics.Debug.WriteLine($"=== SelectedRun changed to: {value?.Name} ===");
+
+                    // Reset all equipment status when switching runs
+                    ResetEquipmentForRun();
+
+                    UpdateRunSummaries();
+                    RefreshLiveOperations();
+                }
+            }
+        }
+
+        private void ResetEquipmentForRun()
+        {
+            if (CurrentShow == null) return;
+
+            System.Diagnostics.Debug.WriteLine("=== Resetting equipment for new run ===");
+
+            // Reset all asset statuses to available when switching runs
+            foreach (var assetStatus in CurrentShow.AssetStatuses)
+            {
+                if (assetStatus.Status == EquipmentStatus.CheckedOut)
+                {
+                    assetStatus.Status = EquipmentStatus.Available;
+                    assetStatus.CurrentlyAssignedToActorId = null;
+                    assetStatus.CurrentSceneId = null;
+                    assetStatus.LastStatusChange = DateTime.Now;
+                    System.Diagnostics.Debug.WriteLine($"Reset asset: {assetStatus.AssetNumber}");
+                }
+            }
+        }
+
+        private void RefreshLiveOperations()
+        {
+            if (EnhancedLiveOperationsViewModel != null)
+            {
+                EnhancedLiveOperationsViewModel.RefreshAllAssetButtons();
+                EnhancedLiveOperationsViewModel.RefreshCounts();
+            }
+        }
+
+        public RunSummaryViewModel? CurrentRunSummary
+        {
+            get => _currentRunSummary;
+            private set => SetProperty(ref _currentRunSummary, value);
+        }
+
+        public AllRunsSummaryViewModel? AllRunsSummary
+        {
+            get => _allRunsSummary;
+            private set => SetProperty(ref _allRunsSummary, value);
+        }
+
+        public bool AllRunsSummaryExpanded
+        {
+            get => _allRunsSummaryExpanded;
+            set => SetProperty(ref _allRunsSummaryExpanded, value);
         }
 
         public SceneBySceneLiveOperationsViewModel? EnhancedLiveOperationsViewModel
         {
             get => _enhancedLiveOperationsViewModel;
-            private set => SetProperty(ref _enhancedLiveOperationsViewModel, value);
+            private set
+            {
+                if (SetProperty(ref _enhancedLiveOperationsViewModel, value))
+                {
+                    // Subscribe to equipment changes to update run summaries
+                    if (value != null && CurrentShow != null)
+                    {
+                        // Monitor asset status changes for run tracking
+                        foreach (var assetStatus in CurrentShow.AssetStatuses)
+                        {
+                            assetStatus.PropertyChanged += OnAssetStatusChanged;
+                        }
+                    }
+                }
+            }
+        }
+
+        private void OnAssetStatusChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(AssetStatus.Status))
+            {
+                // Refresh run summaries when any asset status changes
+                System.Diagnostics.Debug.WriteLine("Asset status changed, refreshing run summaries");
+                UpdateRunSummaries();
+            }
         }
 
         public ObservableCollection<SceneButtonViewModel> SceneButtonCommands { get; }
@@ -112,6 +213,7 @@ namespace Pack_Track.ViewModels
         public ICommand ManageProductsCommand { get; }
         public ICommand SetupShowCommand { get; }
         public ICommand JumpToSceneCommand { get; }
+        public ICommand ToggleAllRunsSummaryCommand { get; }
 
         private void NewShow()
         {
@@ -119,6 +221,11 @@ namespace Pack_Track.ViewModels
             _currentShowPath = string.Empty;
             StatusMessage = "New show created";
             OnPropertyChanged(nameof(WindowTitle));
+        }
+
+        private void ToggleAllRunsSummary()
+        {
+            AllRunsSummaryExpanded = !AllRunsSummaryExpanded;
         }
 
         private async void UpdateLiveOperations()
@@ -174,6 +281,68 @@ namespace Pack_Track.ViewModels
             System.Diagnostics.Debug.WriteLine($"=== UpdateLiveOperations END ===");
         }
 
+        private async void UpdateRunSummaries()
+        {
+            System.Diagnostics.Debug.WriteLine($"=== UpdateRunSummaries START ===");
+
+            if (CurrentShow == null)
+            {
+                System.Diagnostics.Debug.WriteLine("CurrentShow is null");
+                CurrentRunSummary = null;
+                AllRunsSummary = null;
+                return;
+            }
+
+            try
+            {
+                var products = await _dataService.LoadProductsAsync();
+                System.Diagnostics.Debug.WriteLine($"Loaded {products.Count} products for summaries");
+
+                // Update current run summary
+                if (SelectedRun != null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Creating summary for run: {SelectedRun.Name}");
+                    CurrentRunSummary = new RunSummaryViewModel(SelectedRun, CurrentShow, products);
+                    System.Diagnostics.Debug.WriteLine($"Current run summary has {CurrentRunSummary.OutstandingCount} outstanding issues");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("No run selected");
+                    CurrentRunSummary = null;
+                }
+
+                // Update all runs summary
+                System.Diagnostics.Debug.WriteLine("Creating all runs summary");
+                AllRunsSummary = new AllRunsSummaryViewModel(CurrentShow, products);
+                System.Diagnostics.Debug.WriteLine($"All runs summary has {AllRunsSummary.TotalIssuesCount} total issues");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating run summaries: {ex.Message}");
+                CurrentRunSummary = null;
+                AllRunsSummary = null;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"=== UpdateRunSummaries END ===");
+        }
+
+        public void RefreshRunSummaries()
+        {
+            UpdateRunSummaries();
+        }
+
+        public void RefreshRunsDropdown()
+        {
+            // Force refresh of the runs collection
+            OnPropertyChanged(nameof(CurrentShow));
+
+            // If no run is selected and there are runs available, select the first one
+            if (SelectedRun == null && CurrentShow?.Runs?.Any() == true)
+            {
+                SelectedRun = CurrentShow.Runs.OrderBy(r => r.DateTime).First();
+            }
+        }
+
         private void UpdateSceneButtons()
         {
             SceneButtonCommands.Clear();
@@ -191,11 +360,17 @@ namespace Pack_Track.ViewModels
         {
             if (scene != null)
             {
+                System.Diagnostics.Debug.WriteLine($"=== JumpToScene: {scene.Name} ===");
                 SelectedSceneFromButtons = scene;
                 StatusMessage = $"Jumped to {scene.Name}";
 
-                // Trigger a property change to notify the UI to scroll to this scene
+                // Force property change notification for the UI to respond
                 OnPropertyChanged(nameof(SelectedSceneFromButtons));
+
+                // Small delay to ensure UI has updated before scrolling
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                    new Action(() => OnPropertyChanged(nameof(SelectedSceneFromButtons))),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
             }
         }
 
@@ -234,6 +409,9 @@ namespace Pack_Track.ViewModels
                 return;
             }
 
+            // Clear navigation properties before saving to avoid cycles
+            ClearNavigationProperties();
+
             await _dataService.SaveShowAsync(CurrentShow, _currentShowPath);
             StatusMessage = $"Saved show: {CurrentShow.Name}";
         }
@@ -251,10 +429,30 @@ namespace Pack_Track.ViewModels
 
             if (dialog.ShowDialog() == true)
             {
+                // Clear navigation properties before saving to avoid cycles
+                ClearNavigationProperties();
+
                 await _dataService.SaveShowAsync(CurrentShow, dialog.FileName);
                 _currentShowPath = dialog.FileName;
                 StatusMessage = $"Saved show: {CurrentShow.Name}";
                 OnPropertyChanged(nameof(WindowTitle));
+            }
+        }
+
+        private void ClearNavigationProperties()
+        {
+            if (CurrentShow == null) return;
+
+            // Clear navigation properties that cause JSON cycles
+            foreach (var transition in CurrentShow.SceneTransitions)
+            {
+                foreach (var action in transition.Actions)
+                {
+                    action.Product = null;
+                    action.FromActor = null;
+                    action.ToActor = null;
+                    action.Show = null;
+                }
             }
         }
 
@@ -306,6 +504,11 @@ namespace Pack_Track.ViewModels
                 OnPropertyChanged(nameof(CurrentShow));
                 UpdateLiveOperations();
                 UpdateSceneButtons();
+                UpdateRunSummaries();
+
+                // Refresh the runs dropdown
+                RefreshRunsDropdown();
+
                 StatusMessage = "Show setup completed - data refreshed";
             }
             else
@@ -314,6 +517,11 @@ namespace Pack_Track.ViewModels
                 // in case allocations were modified
                 System.Diagnostics.Debug.WriteLine("Refreshing live operations after setup...");
                 UpdateLiveOperations();
+                UpdateRunSummaries();
+
+                // Still refresh runs dropdown in case runs were added
+                RefreshRunsDropdown();
+
                 StatusMessage = "Show setup completed";
             }
         }
